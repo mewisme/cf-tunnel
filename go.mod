@@ -16,7 +16,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.44.0
 	golang.org/x/net v0.57.0
 	golang.org/x/sync v0.22.0
-	zombiezen.com/go/capnproto2 v2.18.0+incompatible
+	zombiezen.com/go/capnproto2 v2.18.2+incompatible
 )
 
 require (
