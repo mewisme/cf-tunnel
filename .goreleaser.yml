@@ -1,0 +1,79 @@
+version: 2
+
+project_name: cf-tunnel
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: cf-tunnel
+    main: ./cmd/cf-tunnel
+    binary: cf-tunnel
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/mewisme/cf-tunnel/internal/buildinfo.version={{.Version}}
+      - -X github.com/mewisme/cf-tunnel/internal/buildinfo.commit={{.Commit}}
+      - -X github.com/mewisme/cf-tunnel/internal/buildinfo.date={{.Date}}
+
+upx:
+  - enabled: true
+    ids:
+      - cf-tunnel
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    compress: best
+    lzma: true
+  - enabled: true
+    ids:
+      - cf-tunnel
+    goos:
+      - windows
+    goarch:
+      - amd64
+    compress: best
+    lzma: true
+
+archives:
+  - id: binaries
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - LICENSE
+      - LICENSING.md
+      - NOTICE
+      - third_party/cloudflared/LICENSE
+      - third_party/cloudflared/NOTICE.md
+      - third_party/cloudflared/UPSTREAM.md
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'

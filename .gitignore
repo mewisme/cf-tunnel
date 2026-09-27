@@ -1,0 +1,4 @@
+/bin/
+/dist/
+*.exe
+.cf-tunnel-source.tgz

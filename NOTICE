@@ -1,0 +1,18 @@
+cf-tunnel
+Copyright 2026 Mew
+
+Project-specific code is licensed under the MIT License in LICENSE.
+
+This product contains software derived from Cloudflare's cloudflared project:
+https://github.com/cloudflare/cloudflared
+
+The retained Cloudflare Quick Tunnel implementation is based on cloudflared
+2026.9.1 and is licensed under the Apache License, Version 2.0. Exact upstream
+provenance, adaptation notes, and a copy of the upstream license are included
+under third_party/cloudflared/.
+
+See LICENSING.md for the file-level license scopes that apply to the combined
+work.
+
+The Cloudflare and cloudflared names are used only to identify the upstream
+project. No endorsement by Cloudflare is implied.
