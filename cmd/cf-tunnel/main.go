@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -80,7 +81,7 @@ func (r runner) run(ctx context.Context, origin string) int {
 
 func (r runner) runConfig(ctx context.Context, cfg cftunnel.Config) int {
 	encoder := json.NewEncoder(r.out)
-	event := lifecycleEvent{State: "connecting", Origin: cfg.OriginURL}
+	event := lifecycleEvent{State: "connecting", Origin: displayOrigin(cfg.OriginURL)}
 	mode := "quick tunnel"
 	if cfg.Token != "" {
 		mode = "managed tunnel"
@@ -90,7 +91,7 @@ func (r runner) runConfig(ctx context.Context, cfg cftunnel.Config) int {
 	}
 	tunnel, err := r.start(ctx, cfg)
 	if err != nil {
-		_ = encoder.Encode(lifecycleEvent{State: "degraded", Origin: cfg.OriginURL, Error: mode + " start failed"})
+		_ = encoder.Encode(lifecycleEvent{State: "degraded", Origin: event.Origin, Error: mode + " start failed"})
 		return 1
 	}
 	if identified, ok := tunnel.(interface{ TunnelID() string }); ok {
@@ -125,4 +126,14 @@ func (r runner) runConfig(ctx context.Context, cfg cftunnel.Config) int {
 	event.Error = mode + " connection stopped unexpectedly"
 	_ = encoder.Encode(event)
 	return 1
+}
+
+// displayOrigin excludes URL userinfo, paths and queries that may hold secrets.
+// A lifecycle event is diagnostic output, not the configuration sent to Start.
+func displayOrigin(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return ""
+	}
+	return (&url.URL{Scheme: u.Scheme, Host: u.Host}).String()
 }

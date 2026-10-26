@@ -150,6 +150,33 @@ func TestRunnerDoesNotEchoStartError(t *testing.T) {
 	}
 }
 
+func TestRunnerRedactsSensitiveOriginComponents(t *testing.T) {
+	const secret = "private-password"
+	const querySecret = "private-api-key"
+	const pathSecret = "private-path"
+	origin := "http://user:" + secret + "@127.0.0.1:37421/" + pathSecret + "?api_key=" + querySecret
+	var out synchronizedBuffer
+	r := runner{out: &out, start: func(_ context.Context, cfg cftunnel.Config) (runtimeTunnel, error) {
+		if cfg.OriginURL != origin {
+			t.Fatalf("actual origin was unexpectedly modified: %q", cfg.OriginURL)
+		}
+		return nil, errors.New("start failed")
+	}}
+	if code := r.run(context.Background(), origin); code != 1 {
+		t.Fatalf("code=%d", code)
+	}
+	output := out.String()
+	for _, value := range []string{secret, querySecret, pathSecret, "user:"} {
+		if strings.Contains(output, value) {
+			t.Fatalf("sensitive origin component %q leaked in %q", value, output)
+		}
+	}
+	events := decodeEvents(t, out.Bytes())
+	if len(events) != 2 || events[0].Origin != "http://127.0.0.1:37421" || events[1].Origin != events[0].Origin {
+		t.Fatalf("unexpected sanitized lifecycle: %#v", events)
+	}
+}
+
 func TestRunnerDoesNotEchoReadinessError(t *testing.T) {
 	const secret = "edge-diagnostic-must-not-leak"
 	var out synchronizedBuffer

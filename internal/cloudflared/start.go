@@ -278,6 +278,9 @@ func validateOriginURL(raw string) (string, error) {
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return "", fmt.Errorf("origin URL must be http or https")
 	}
+	if u.User != nil {
+		return "", fmt.Errorf("origin URL must not contain credentials")
+	}
 	return u.String(), nil
 }
 

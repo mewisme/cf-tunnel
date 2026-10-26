@@ -39,6 +39,17 @@ func TestStartRejectsNonHTTPOrigin(t *testing.T) {
 	}
 }
 
+func TestStartRejectsOriginURLCredentials(t *testing.T) {
+	const secret = "password-that-must-not-leak"
+	_, err := Start(context.Background(), Config{OriginURL: "http://user:" + secret + "@127.0.0.1:8080"})
+	if err == nil || !strings.Contains(err.Error(), "must not contain credentials") {
+		t.Fatalf("expected credential rejection: %v", err)
+	}
+	if strings.Contains(err.Error(), secret) {
+		t.Fatal("origin credentials leaked in validation error")
+	}
+}
+
 func TestNewIngressHandler(t *testing.T) {
 	called := false
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

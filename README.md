@@ -62,19 +62,27 @@ cf-tunnel --origin http://127.0.0.1:37421
 ```
 
 To connect an **existing Dashboard-managed tunnel**, copy its connector token
-from Cloudflare Zero Trust and run:
+from Cloudflare Zero Trust. Prefer entering it without exposing it in shell
+history or process arguments (Bash):
+
+```bash
+read -rsp 'Cloudflare tunnel token: ' CF_TUNNEL_TOKEN
+echo
+export CF_TUNNEL_TOKEN
+cf-tunnel
+unset CF_TUNNEL_TOKEN
+```
+
+For automation, inject `CF_TUNNEL_TOKEN` from the process manager or a secret
+store. The `--token` flag is also supported, but a literal token argument can
+be exposed via shell history and process listings:
 
 ```bash
 cf-tunnel --token '<tunnel-token>'
 ```
 
-For sensitive deployments, avoid placing the token in command-line history or
-process arguments. Pass it through an environment variable instead:
-
-```bash
-export CF_TUNNEL_TOKEN='<tunnel-token>'
-cf-tunnel
-```
+Environment variables can also be inspected by sufficiently privileged local
+processes; restrict access to the connector's runtime environment.
 
 Configure public hostnames and their local service URLs (for example,
 `http://127.0.0.1:8080`) on the Cloudflare Dashboard. The connector
@@ -86,12 +94,18 @@ configured on the dashboard must still be running and reachable.
 Use **either** `--token` or `--origin`. The minimal runtime keeps one QUIC
 edge connection. Token mode supports remotely managed HTTP(S)/WebSocket
 origins; it does not add Cloudflare account login, service installation, or
-private-network routing management.
+private-network routing management. Remote ingress rules requiring
+`originRequest.access.required` (origin-side Cloudflare Access JWT verification)
+are **not supported** and fail closed with HTTP 403; Edge-enforced Access
+policies are a separate mechanism. Do not configure origin-side JWT validation
+for this minimal connector.
 
 The binary writes newline-delimited JSON lifecycle events to stdout. The stable
 fields are `state`, `origin`, `url`, `tunnel_id`, and `error`. Provisioning credentials,
 account tags, tunnel secrets, and raw provider response bodies are never
 emitted.
+The `origin` field includes only the URL scheme and host, not embedded
+credentials, URL paths or queries. Origin URLs containing userinfo are rejected.
 
 Example lifecycle:
 
