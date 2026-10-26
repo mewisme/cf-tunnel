@@ -9,13 +9,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/quic-go/quic-go"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/connection"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/edgediscovery"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/orchestration"
-	v3 "github.com/mewisme/cf-tunnel/internal/cloudflared/quic/v3"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/retry"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/signal"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tunnelstate"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/connection"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/edgediscovery"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/orchestration"
+	v3 "go.mewis.me/cf-tunnel/internal/cloudflared/quic/v3"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/retry"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/signal"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tunnelstate"
 )
 
 const (

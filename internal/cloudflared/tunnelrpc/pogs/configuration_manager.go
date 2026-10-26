@@ -8,8 +8,8 @@ import (
 	"zombiezen.com/go/capnproto2/rpc"
 	"zombiezen.com/go/capnproto2/server"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tunnelrpc/metrics"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tunnelrpc/proto"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tunnelrpc/metrics"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tunnelrpc/proto"
 )
 
 type ConfigurationManager interface {

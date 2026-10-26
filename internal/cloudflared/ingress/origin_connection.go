@@ -8,10 +8,10 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/ipaccess"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/socks"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/stream"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/websocket"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/ipaccess"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/socks"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/stream"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/websocket"
 )
 
 // OriginConnection is a way to stream to a service running on the user's origin.

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/features"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/features"
 )
 
 // errUnknownPostQuantumMode is returned by GetCurvePreferences when the

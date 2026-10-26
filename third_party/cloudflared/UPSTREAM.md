@@ -10,6 +10,29 @@ Quick Tunnel source is adapted from `github.com/cloudflare/cloudflared`.
 | License | Apache License 2.0 (copied as `LICENSE`) |
 | Official linux-amd64 checksum | `03f1f25d1cc93b9ad6c60569d44060bc4f17ed97075760ed8cfca4b12dcd68cc` |
 
+## Selective follow-up (2026-10-26)
+
+Reviewed [upstream 2026.10.3](https://github.com/cloudflare/cloudflared/compare/2026.9.1...2026.10.3)
+without replacing the original 2026.9.1 extraction. The minimal project
+incorporates these relevant compatibility/security fixes:
+
+- QUIC request-body close cancels the receive side without closing the response
+  stream (`connection/quic_connection.go`, `quic/safe_stream.go`; TUN-10808).
+- Ingress route matching canonicalizes paths when Access rules are present to
+  prevent path traversal from selecting a different route (VULN-141859).
+- Quick Tunnel provisioning responses are capped at 1 MiB.
+- TCP/SOCKS-over-WebSocket preserves the unread tail of oversized messages
+  (`websocket/connection.go`; TUN-10994).
+- Build minimum is Go 1.27.3 to inherit patched upstream Go security fixes.
+
+The connector also supports **Dashboard-managed tunnel tokens** using the
+existing supervisor, remote-config update RPC, and origin ingress parser.
+Tokens are decoded in-memory. No `cloudflared tunnel login`, config-file
+authority, OS service management, or persistent token storage was imported.
+The local base remains 2026.9.1; these are isolated backports rather than a
+wholesale rebase of Cloudflare sources. Protected Quick Tunnel OTP/login and
+its accompanying dependencies were intentionally not imported.
+
 The sidecar exposes the Quick Tunnel entry as a small library `Start(ctx, Config)`
 that provisions via `POST {quick-service}/tunnel` (default
 `https://api.trycloudflare.com`) and then runs the connection supervisor against
@@ -91,7 +114,7 @@ Remove from the extracted path if the corresponding cloudflared code is dropped:
 
 ## Keep packages (tag `2026.9.1`)
 
-Rewrite imports into `github.com/mewisme/cf-tunnel/internal/cloudflared/...`:
+Rewrite imports into `go.mewis.me/cf-tunnel/internal/cloudflared/...`:
 
 - `connection`, `connection/dialopts`
 - `supervisor`
@@ -108,7 +131,7 @@ Keep only HTTP origin pieces from `ingress`. Drop `ingress/middleware` (JWT/Acce
 Copied from `/tmp/cloudflared-src` at commit `f11dea9cb7079e90a982c1a2d5548ab40847fdcf` (~23k LOC, tests excluded):
 
 - keep packages above, plus compile deps: `config` (types only), `ingress` (+ `origins`), `carrier` (bastion dest helper only), `cfio`, `client`, `crypto`, `datagramsession`, `features`, `fips`, `flow`, `tracing`, `websocket`, `socks`
-- rewritten `github.com/cloudflare/cloudflared` → `github.com/mewisme/cf-tunnel/internal/cloudflared`
+- rewritten `github.com/cloudflare/cloudflared` → `go.mewis.me/cf-tunnel/internal/cloudflared`
 - no `cmd/cloudflared`, no `github.com/cloudflare/cloudflared/...` imports, no `urfave/cli`, no Sentry
 
 Local stubs/patches:
@@ -141,11 +164,14 @@ git -C /tmp/cloudflared-src log --oneline f11dea9cb7079e90a982c1a2d5548ab40847fd
 ```
 
 Diff keep-set packages against `internal/cloudflared/` after rewriting
-`github.com/cloudflare/cloudflared` → `github.com/mewisme/cf-tunnel/internal/cloudflared`.
+`github.com/cloudflare/cloudflared` → `go.mewis.me/cf-tunnel/internal/cloudflared`.
 Re-apply every local stub/patch listed above. Re-run MCP/Admin Quick Tunnel
 smoke against the official binary for that tag before extracting.
 
-`reportedVersion` in `start.go` must stay equal to the UPSTREAM.md tag.
+The upstream source tag stays in this file as provenance; the connector
+reports `cf-tunnel.v<version>` to Cloudflare Edge. The version comes from
+release build metadata when available, otherwise from the Go module build
+information. This intentionally differs from the original cloudflared tag.
 
 ## Release checklist (before bumping the pin)
 

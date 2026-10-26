@@ -11,15 +11,16 @@ import (
 	"strings"
 	"syscall"
 
-	cftunnel "github.com/mewisme/cf-tunnel"
-	"github.com/mewisme/cf-tunnel/internal/buildinfo"
+	cftunnel "go.mewis.me/cf-tunnel"
+	"go.mewis.me/cf-tunnel/internal/buildinfo"
 )
 
 type lifecycleEvent struct {
-	State  string `json:"state"`
-	Origin string `json:"origin,omitempty"`
-	URL    string `json:"url,omitempty"`
-	Error  string `json:"error,omitempty"`
+	State    string `json:"state"`
+	Origin   string `json:"origin,omitempty"`
+	URL      string `json:"url,omitempty"`
+	TunnelID string `json:"tunnel_id,omitempty"`
+	Error    string `json:"error,omitempty"`
 }
 
 type runtimeTunnel interface {
@@ -43,6 +44,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("cf-tunnel", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	origin := flags.String("origin", "", "single local HTTP origin to expose")
+	token := flags.String("token", "", "Dashboard-managed Cloudflare tunnel token (prefer CF_TUNNEL_TOKEN environment variable)")
 	version := flags.Bool("version", false, "print runtime version")
 	if err := flags.Parse(args); err != nil {
 		return 2
@@ -51,13 +53,21 @@ func run(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintln(stdout, buildinfo.Version())
 		return 0
 	}
-	if strings.TrimSpace(*origin) == "" {
-		_, _ = fmt.Fprintln(stderr, "origin is required")
+	cfg := cftunnel.Config{OriginURL: strings.TrimSpace(*origin), Token: strings.TrimSpace(*token)}
+	if cfg.Token == "" && cfg.OriginURL == "" {
+		cfg.Token = strings.TrimSpace(os.Getenv("CF_TUNNEL_TOKEN"))
+	}
+	if cfg.OriginURL == "" && cfg.Token == "" {
+		_, _ = fmt.Fprintln(stderr, "origin or token is required")
+		return 2
+	}
+	if cfg.OriginURL != "" && cfg.Token != "" {
+		_, _ = fmt.Fprintln(stderr, "origin and token cannot be combined")
 		return 2
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	return runner{start: startQuickTunnel, out: stdout}.run(ctx, strings.TrimSpace(*origin))
+	return runner{start: startQuickTunnel, out: stdout}.runConfig(ctx, cfg)
 }
 
 func startQuickTunnel(ctx context.Context, cfg cftunnel.Config) (runtimeTunnel, error) {
@@ -65,32 +75,54 @@ func startQuickTunnel(ctx context.Context, cfg cftunnel.Config) (runtimeTunnel, 
 }
 
 func (r runner) run(ctx context.Context, origin string) int {
+	return r.runConfig(ctx, cftunnel.Config{OriginURL: origin})
+}
+
+func (r runner) runConfig(ctx context.Context, cfg cftunnel.Config) int {
 	encoder := json.NewEncoder(r.out)
-	if err := encoder.Encode(lifecycleEvent{State: "connecting", Origin: origin}); err != nil {
+	event := lifecycleEvent{State: "connecting", Origin: cfg.OriginURL}
+	mode := "quick tunnel"
+	if cfg.Token != "" {
+		mode = "managed tunnel"
+	}
+	if err := encoder.Encode(event); err != nil {
 		return 1
 	}
-	tunnel, err := r.start(ctx, cftunnel.Config{OriginURL: origin})
+	tunnel, err := r.start(ctx, cfg)
 	if err != nil {
-		_ = encoder.Encode(lifecycleEvent{State: "degraded", Origin: origin, Error: "quick tunnel start failed"})
+		_ = encoder.Encode(lifecycleEvent{State: "degraded", Origin: cfg.OriginURL, Error: mode + " start failed"})
 		return 1
+	}
+	if identified, ok := tunnel.(interface{ TunnelID() string }); ok {
+		event.TunnelID = identified.TunnelID()
 	}
 	if err := tunnel.WaitUntilReady(ctx); err != nil {
 		if ctx.Err() != nil {
-			_ = encoder.Encode(lifecycleEvent{State: "stopped", Origin: origin})
+			event.State = "stopped"
+			_ = encoder.Encode(event)
 			return 0
 		}
-		_ = encoder.Encode(lifecycleEvent{State: "degraded", Origin: origin, Error: "quick tunnel connection failed"})
+		event.State = "degraded"
+		event.Error = mode + " connection failed"
+		_ = encoder.Encode(event)
 		return 1
 	}
-	if err := encoder.Encode(lifecycleEvent{State: "ready", Origin: origin, URL: tunnel.PublicURL()}); err != nil {
+	event.State = "ready"
+	event.URL = tunnel.PublicURL()
+	if err := encoder.Encode(event); err != nil {
 		return 1
 	}
 	err = tunnel.Wait()
 	if ctx.Err() != nil {
-		_ = encoder.Encode(lifecycleEvent{State: "stopped", Origin: origin})
+		event.State = "stopped"
+		event.URL = ""
+		_ = encoder.Encode(event)
 		return 0
 	}
 	_ = err
-	_ = encoder.Encode(lifecycleEvent{State: "degraded", Origin: origin, Error: "quick tunnel connection stopped unexpectedly"})
+	event.State = "degraded"
+	event.URL = ""
+	event.Error = mode + " connection stopped unexpectedly"
+	_ = encoder.Encode(event)
 	return 1
 }

@@ -17,13 +17,13 @@ import (
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/client"
-	cfdflow "github.com/mewisme/cf-tunnel/internal/cloudflared/flow"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/client"
+	cfdflow "go.mewis.me/cf-tunnel/internal/cloudflared/flow"
 
-	cfdquic "github.com/mewisme/cf-tunnel/internal/cloudflared/quic"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tracing"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tunnelrpc/pogs"
-	rpcquic "github.com/mewisme/cf-tunnel/internal/cloudflared/tunnelrpc/quic"
+	cfdquic "go.mewis.me/cf-tunnel/internal/cloudflared/quic"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tracing"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tunnelrpc/pogs"
+	rpcquic "go.mewis.me/cf-tunnel/internal/cloudflared/tunnelrpc/quic"
 )
 
 const (
@@ -189,7 +189,7 @@ func (q *quicConnection) runStream(quicStream *quic.Stream) {
 	// code executed in the code path of handleStream don't trigger an earlier close to the downstream write stream.
 	// So, we wrap the stream with a no-op write closer and only this method can actually close write side of the stream.
 	// A call to close will simulate a close to the read-side, which will fail subsequent reads.
-	noCloseStream := &nopCloserReadWriter{ReadWriteCloser: stream}
+	noCloseStream := &nopCloserReadWriter{readWriteCloser: stream}
 	ss := rpcquic.NewCloudflaredServer(q.handleDataStream, q.datagramHandler, q, q.rpcTimeout)
 	if err := ss.Serve(ctx, noCloseStream); err != nil {
 		q.logger.Debug().Err(err).Msg("Failed to handle QUIC stream")
@@ -418,9 +418,16 @@ func isTransferEncodingChunked(req *http.Request) bool {
 	return strings.Contains(strings.ToLower(transferEncodingVal), "chunked")
 }
 
-// A helper struct that guarantees a call to close only affects read side, but not write side.
-type nopCloserReadWriter struct {
+// readWriteCloser allows the request body to cancel its receive side without
+// closing the response writer on a bidirectional QUIC stream.
+type readWriteCloser interface {
 	io.ReadWriteCloser
+	CloseRead() error
+}
+
+// nopCloserReadWriter adapts a QUIC stream to the HTTP request body contract.
+type nopCloserReadWriter struct {
+	readWriteCloser
 
 	// for use by Read only
 	// we don't need a memory barrier here because there is an implicit assumption that
@@ -441,7 +448,7 @@ func (np *nopCloserReadWriter) Read(p []byte) (n int, err error) {
 		return 0, fmt.Errorf("closed by handler")
 	}
 
-	n, err = np.ReadWriteCloser.Read(p)
+	n, err = np.readWriteCloser.Read(p)
 	if err == io.EOF {
 		np.sawEOF = true
 	}
@@ -450,7 +457,8 @@ func (np *nopCloserReadWriter) Read(p []byte) (n int, err error) {
 }
 
 func (np *nopCloserReadWriter) Close() error {
-	atomic.StoreUint32(&np.closed, 1)
-
-	return nil
+	if !atomic.CompareAndSwapUint32(&np.closed, 0, 1) {
+		return nil
+	}
+	return np.CloseRead()
 }

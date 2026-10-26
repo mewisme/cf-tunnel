@@ -4,7 +4,7 @@ import (
 	capnp "zombiezen.com/go/capnproto2"
 	"zombiezen.com/go/capnproto2/rpc"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tunnelrpc/proto"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tunnelrpc/proto"
 )
 
 type CloudflaredServer interface {

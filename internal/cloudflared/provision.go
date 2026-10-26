@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/connection"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/connection"
 )
 
 const (

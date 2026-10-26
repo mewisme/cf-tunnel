@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -12,9 +13,9 @@ import (
 	"github.com/rs/zerolog"
 	"golang.org/x/net/idna"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/config"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/ingress/middleware"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/ipaccess"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/config"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/ingress/middleware"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/ipaccess"
 )
 
 var (
@@ -43,6 +44,12 @@ func (ing Ingress) FindMatchingRule(hostname, path string) (*Rule, int) {
 	if err == nil {
 		hostname = host
 	}
+	// Normalize once before first-match routing when Cloudflare Access
+	// middleware is configured; otherwise traversal can bypass protected rules.
+	// Only the value used for route selection changes, not the origin request.
+	if rulesRequireAccess(ing.InternalRules) || rulesRequireAccess(ing.Rules) {
+		path = canonicalPathForMatching(path)
+	}
 	for i, rule := range ing.InternalRules {
 		if rule.Matches(hostname, path) {
 			// Local rule matches return a negative rule index to distiguish local rules from user-defined rules in logs
@@ -58,6 +65,28 @@ func (ing Ingress) FindMatchingRule(hostname, path string) (*Rule, int) {
 
 	i := len(ing.Rules) - 1
 	return &ing.Rules[i], i
+}
+
+func rulesRequireAccess(rules []Rule) bool {
+	for _, rule := range rules {
+		if rule.Config.Access.Required {
+			return true
+		}
+	}
+	return false
+}
+
+func canonicalPathForMatching(p string) string {
+	if p == "" {
+		return "/"
+	}
+	p = strings.ReplaceAll(p, `\`, "/")
+	trailingSlash := strings.HasSuffix(p, "/") || strings.HasSuffix(p, "/.") || strings.HasSuffix(p, "/..")
+	cleaned := path.Clean(p)
+	if trailingSlash && cleaned != "/" {
+		cleaned += "/"
+	}
+	return cleaned
 }
 
 func matchHost(ruleHost, reqHost string) bool {

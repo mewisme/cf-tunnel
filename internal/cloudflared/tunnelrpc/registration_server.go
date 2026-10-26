@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tunnelrpc/pogs"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tunnelrpc/pogs"
 )
 
 // RegistrationServer provides a handler interface for a client to provide methods to handle the different types of

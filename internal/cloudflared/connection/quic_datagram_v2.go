@@ -14,16 +14,16 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 
-	cfdflow "github.com/mewisme/cf-tunnel/internal/cloudflared/flow"
+	cfdflow "go.mewis.me/cf-tunnel/internal/cloudflared/flow"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/datagramsession"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/ingress"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/management"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/packet"
-	cfdquic "github.com/mewisme/cf-tunnel/internal/cloudflared/quic"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tracing"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tunnelrpc/pogs"
-	rpcquic "github.com/mewisme/cf-tunnel/internal/cloudflared/tunnelrpc/quic"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/datagramsession"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/ingress"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/management"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/packet"
+	cfdquic "go.mewis.me/cf-tunnel/internal/cloudflared/quic"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tracing"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tunnelrpc/pogs"
+	rpcquic "go.mewis.me/cf-tunnel/internal/cloudflared/tunnelrpc/quic"
 )
 
 const (

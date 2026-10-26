@@ -8,9 +8,9 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/packet"
-	quicpogs "github.com/mewisme/cf-tunnel/internal/cloudflared/quic"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tracing"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/packet"
+	quicpogs "go.mewis.me/cf-tunnel/internal/cloudflared/quic"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tracing"
 )
 
 // Upstream of raw packets

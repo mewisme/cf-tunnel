@@ -14,16 +14,16 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	cfdflow "github.com/mewisme/cf-tunnel/internal/cloudflared/flow"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/management"
+	cfdflow "go.mewis.me/cf-tunnel/internal/cloudflared/flow"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/management"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/carrier"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/cfio"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/connection"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/ingress"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/stream"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tracing"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tunnelrpc/pogs"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/carrier"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/cfio"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/connection"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/ingress"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/stream"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tracing"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tunnelrpc/pogs"
 )
 
 const (

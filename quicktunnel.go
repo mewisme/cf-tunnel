@@ -5,18 +5,26 @@ package cftunnel
 import (
 	"context"
 	"errors"
+	"net/http"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared"
+	"go.mewis.me/cf-tunnel/internal/cloudflared"
 )
 
 // DefaultQuickService is Cloudflare's anonymous Quick Tunnel provisioning
 // endpoint.
 const DefaultQuickService = cloudflared.DefaultQuickService
 
-// Config configures one ephemeral Quick Tunnel.
+// Config configures either a Quick Tunnel or a Dashboard-managed tunnel.
 type Config struct {
 	// OriginURL is the HTTP(S) origin exposed through the tunnel.
+	// Set either OriginURL or Handler, not both.
 	OriginURL string
+	// Handler serves requests in-process without opening a local HTTP listener.
+	Handler http.Handler
+	// Token connects an existing Dashboard-managed Cloudflare Tunnel.
+	// Managed tunnel ingress rules are received from Cloudflare; do not set
+	// OriginURL or Handler with Token.
+	Token string
 	// QuickService overrides the provisioning service. Empty uses
 	// DefaultQuickService. This is primarily useful for tests and compatible
 	// private provisioning frontends.
@@ -26,29 +34,42 @@ type Config struct {
 // Tunnel is one running ephemeral Quick Tunnel. Cancel the context passed to
 // Start to stop it, then call Wait to observe completion.
 type Tunnel struct {
-	// URL is the ephemeral public https://*.trycloudflare.com URL.
+	// URL is the ephemeral public https://*.trycloudflare.com URL for a
+	// Quick Tunnel. Managed tunnels route via Dashboard-defined hostnames.
 	URL string
+	// ID is the managed tunnel UUID (empty for anonymous Quick Tunnels).
+	ID string
 
 	inner *cloudflared.Tunnel
 }
 
-// Start provisions and starts one Quick Tunnel to cfg.OriginURL.
+// Start starts an anonymous Quick Tunnel or a Dashboard-managed tunnel.
 func Start(ctx context.Context, cfg Config) (*Tunnel, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	inner, err := cloudflared.Start(ctx, cloudflared.Config{
 		OriginURL:    cfg.OriginURL,
+		Handler:      cfg.Handler,
+		Token:        cfg.Token,
 		QuickService: cfg.QuickService,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &Tunnel{URL: inner.URL, inner: inner}, nil
+	return &Tunnel{URL: inner.URL, ID: inner.ID, inner: inner}, nil
 }
 
-// PublicURL returns the ephemeral public URL. It exists alongside URL so
-// process supervisors can depend on a small interface rather than this type.
+// TunnelID returns the managed tunnel UUID. Quick Tunnels return an empty ID.
+func (t *Tunnel) TunnelID() string {
+	if t == nil {
+		return ""
+	}
+	return t.ID
+}
+
+// PublicURL returns the Quick Tunnel's ephemeral public URL, or "" for
+// Dashboard-managed tunnels whose hostnames are configured remotely.
 func (t *Tunnel) PublicURL() string {
 	if t == nil {
 		return ""

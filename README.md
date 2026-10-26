@@ -1,6 +1,13 @@
 # cf-tunnel
 
-Minimal Cloudflare Quick Tunnel runtime for exposing one local HTTP(S) origin.
+Cloudflare Edge connector identity: `cf-tunnel.v<version>` (for example,
+`cf-tunnel.v0.0.1`). Release builds use the GoReleaser version; binaries built
+with `go install` and applications embedding the library derive it from Go
+module metadata. Unversioned development builds report `cf-tunnel.vdev`.
+This is the connector's own version, not the base cloudflared source version.
+
+Minimal Cloudflare Quick Tunnel runtime for exposing one local HTTP(S) origin
+or an in-process `http.Handler`.
 It can be used either as a standalone binary or as an importable Go module.
 Both surfaces use the same tunnel implementation and intentionally keep the
 runtime ephemeral: no account login, tunnel registry, updater, service manager,
@@ -45,7 +52,7 @@ when it is empty.
 Alternatively, install with Go:
 
 ```bash
-go install github.com/mewisme/cf-tunnel/cmd/cf-tunnel@latest
+go install go.mewis.me/cf-tunnel/cmd/cf-tunnel@latest
 ```
 
 Run one tunnel:
@@ -54,8 +61,35 @@ Run one tunnel:
 cf-tunnel --origin http://127.0.0.1:37421
 ```
 
+To connect an **existing Dashboard-managed tunnel**, copy its connector token
+from Cloudflare Zero Trust and run:
+
+```bash
+cf-tunnel --token '<tunnel-token>'
+```
+
+For sensitive deployments, avoid placing the token in command-line history or
+process arguments. Pass it through an environment variable instead:
+
+```bash
+export CF_TUNNEL_TOKEN='<tunnel-token>'
+cf-tunnel
+```
+
+Configure public hostnames and their local service URLs (for example,
+`http://127.0.0.1:8080`) on the Cloudflare Dashboard. The connector
+automatically receives the remote ingress rules and subsequent updates. You
+do not need to install a system service, create a local ingress config file, or
+specify a local port on the `cf-tunnel` command line. The origin server
+configured on the dashboard must still be running and reachable.
+
+Use **either** `--token` or `--origin`. The minimal runtime keeps one QUIC
+edge connection. Token mode supports remotely managed HTTP(S)/WebSocket
+origins; it does not add Cloudflare account login, service installation, or
+private-network routing management.
+
 The binary writes newline-delimited JSON lifecycle events to stdout. The stable
-fields are `state`, `origin`, `url`, and `error`. Provisioning credentials,
+fields are `state`, `origin`, `url`, `tunnel_id`, and `error`. Provisioning credentials,
 account tags, tunnel secrets, and raw provider response bodies are never
 emitted.
 
@@ -68,11 +102,13 @@ Example lifecycle:
 ```
 
 Cancel the process with `SIGINT` or `SIGTERM` for a clean shutdown.
+In token mode the `ready` event contains `tunnel_id`, not `url`: managed
+public hostnames belong to Dashboard configuration, not the connector.
 
 ## Go module
 
 ```bash
-go get github.com/mewisme/cf-tunnel
+go get go.mewis.me/cf-tunnel
 ```
 
 ```go
@@ -82,7 +118,7 @@ import (
 	"context"
 	"log"
 
-	cftunnel "github.com/mewisme/cf-tunnel"
+	cftunnel "go.mewis.me/cf-tunnel"
 )
 
 func main() {
@@ -110,6 +146,62 @@ One `Start` call owns one ephemeral tunnel. Use `WaitUntilReady` when the caller
 needs confirmation that the first Cloudflare edge connection is established,
 and cancel the context to stop it. `Config.QuickService` is optional and defaults to
 `https://api.trycloudflare.com`.
+
+### Dashboard-managed tunnel (Go SDK)
+
+Use the same API with `Config.Token`. The library does not provision an
+anonymous Quick Tunnel or require `OriginURL` in this mode:
+
+```go
+tunnel, err := cftunnel.Start(ctx, cftunnel.Config{
+	Token: os.Getenv("CF_TUNNEL_TOKEN"),
+})
+if err != nil {
+	return err
+}
+if err := tunnel.WaitUntilReady(ctx); err != nil {
+	return err
+}
+log.Printf("connected managed tunnel %s", tunnel.TunnelID())
+return tunnel.Wait()
+```
+
+Import `os` for the environment variable. The caller owns the context and
+shutdown. The registered hostname(s), local origin URLs, and their updates are
+managed by Cloudflare. `PublicURL()` is empty in managed mode; retrieve
+the URL(s) from your Dashboard. Do not combine `Token` with `OriginURL`,
+`Handler`, or `QuickService`.
+
+### In-memory HTTP origin
+
+Embed the tunnel in a Go service without binding a localhost TCP port:
+
+```go
+handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`{"ok":true}`))
+})
+
+tunnel, err := cftunnel.Start(ctx, cftunnel.Config{Handler: handler})
+if err != nil {
+	return err
+}
+if err := tunnel.WaitUntilReady(ctx); err != nil {
+	return err
+}
+log.Printf("public URL: %s", tunnel.PublicURL())
+```
+
+Import `net/http` to define the handler. Use either `Config.Handler` or
+`Config.OriginURL`, never both. The handler runs in the caller's process;
+HTTP headers, request contexts, and streaming/SSE responses pass through the
+existing ingress HTTP handling path. The binary keeps its existing `--origin`
+behavior.
+
+In-memory means **no origin listener**. The tunnel still makes outbound QUIC
+connections to Cloudflare, and its public URL remains accessible from the
+internet. Secure sensitive endpoints such as MCP servers with suitable
+authentication; in-memory routing does not add access control.
 
 ## CodeMCP compatibility
 
@@ -148,9 +240,10 @@ current UPX does not support PE/ARM64 packing.
 ## Upstream and licensing
 
 This project contains a deliberately reduced and modified subset of
-Cloudflare's `cloudflared` Quick Tunnel implementation, pinned to upstream tag
-`2026.9.1`. See `third_party/cloudflared/UPSTREAM.md` for the exact commit,
-transport constraints, and extraction notes.
+Cloudflare's `cloudflared` implementation, based on upstream tag `2026.9.1`
+with selected fixes backported from `2026.10.3`. See
+`third_party/cloudflared/UPSTREAM.md` for provenance, transport constraints,
+and the backport list.
 
 Project-specific code is MIT licensed and Copyright (c) 2026 Mew. The retained
 and adapted Cloudflare implementation remains Apache-2.0 licensed and

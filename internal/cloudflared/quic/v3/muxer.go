@@ -9,8 +9,8 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/ingress"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/packet"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/ingress"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/packet"
 )
 
 const (

@@ -6,7 +6,7 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/connection"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/connection"
 )
 
 type ConnTracker struct {

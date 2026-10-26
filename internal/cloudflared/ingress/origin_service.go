@@ -16,11 +16,11 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/hello"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/ipaccess"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/management"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/socks"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tlsconfig"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/hello"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/ipaccess"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/management"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/socks"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tlsconfig"
 )
 
 const (

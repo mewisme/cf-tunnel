@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/ingress/middleware"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/ingress/middleware"
 )
 
 // Rule routes traffic from a hostname/path on the public internet to the

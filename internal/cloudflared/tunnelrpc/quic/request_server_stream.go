@@ -5,7 +5,7 @@ import (
 
 	capnp "zombiezen.com/go/capnproto2"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tunnelrpc/pogs"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tunnelrpc/pogs"
 )
 
 // RequestServerStream is a stream to serve requests

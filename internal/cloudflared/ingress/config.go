@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/config"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/ipaccess"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/config"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/ipaccess"
 )
 
 var (

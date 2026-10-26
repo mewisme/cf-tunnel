@@ -6,8 +6,8 @@ import (
 	"io"
 	"time"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tunnelrpc"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tunnelrpc/pogs"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tunnelrpc"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tunnelrpc/pogs"
 )
 
 // SessionManagerServer handles streams with the SessionManager RPCs.

@@ -3,8 +3,8 @@ package supervisor
 import (
 	"github.com/rs/zerolog"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/connection"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tunnelstate"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/connection"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tunnelstate"
 )
 
 type ConnAwareLogger struct {

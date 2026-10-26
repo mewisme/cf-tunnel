@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/management"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/management"
 )
 
 const (

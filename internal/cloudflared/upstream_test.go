@@ -6,14 +6,14 @@ import (
 	"testing"
 )
 
-func TestUpstreamPinMatchesReportedVersion(t *testing.T) {
+func TestUpstreamPinRecordsSourceVersion(t *testing.T) {
 	body, err := os.ReadFile("../../third_party/cloudflared/UPSTREAM.md")
 	if err != nil {
 		t.Fatal(err)
 	}
 	text := string(body)
-	if !strings.Contains(text, "`"+reportedVersion+"`") {
-		t.Fatalf("UPSTREAM.md missing tag %s", reportedVersion)
+	if !strings.Contains(text, "| Tag | `2026.9.1` |") {
+		t.Fatal("UPSTREAM.md missing original source tag")
 	}
 	if !strings.Contains(text, "f11dea9cb7079e90a982c1a2d5548ab40847fdcf") {
 		t.Fatal("UPSTREAM.md missing pinned commit")

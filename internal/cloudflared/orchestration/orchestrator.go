@@ -11,13 +11,13 @@ import (
 	pkgerrors "github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/config"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/connection"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/flags"
-	cfdflow "github.com/mewisme/cf-tunnel/internal/cloudflared/flow"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/ingress"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/proxy"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tunnelrpc/pogs"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/config"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/connection"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/flags"
+	cfdflow "go.mewis.me/cf-tunnel/internal/cloudflared/flow"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/ingress"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/proxy"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tunnelrpc/pogs"
 )
 
 // Orchestrator manages configurations, so they can be updatable during runtime
@@ -92,7 +92,6 @@ func (o *Orchestrator) UpdateConfig(version int32, config []byte) *pogs.UpdateCo
 	if err := json.Unmarshal(config, &newConf); err != nil {
 		o.log.Err(err).
 			Int32("version", version).
-			Str("config", string(config)).
 			Msgf("Failed to deserialize new configuration")
 		return &pogs.UpdateConfigurationResponse{
 			LastAppliedVersion: o.currentVersion,
@@ -103,7 +102,6 @@ func (o *Orchestrator) UpdateConfig(version int32, config []byte) *pogs.UpdateCo
 	if err := o.updateIngress(newConf.Ingress, newConf.WarpRouting); err != nil {
 		o.log.Err(err).
 			Int32("version", version).
-			Str("config", string(config)).
 			Msgf("Failed to update ingress")
 		return &pogs.UpdateConfigurationResponse{
 			LastAppliedVersion: o.currentVersion,
@@ -114,7 +112,6 @@ func (o *Orchestrator) UpdateConfig(version int32, config []byte) *pogs.UpdateCo
 
 	o.log.Info().
 		Int32("version", version).
-		Str("config", string(config)).
 		Msg("Updated to new configuration")
 	configVersion.Set(float64(version))
 	return &pogs.UpdateConfigurationResponse{

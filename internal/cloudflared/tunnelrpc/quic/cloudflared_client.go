@@ -11,9 +11,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tunnelrpc"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tunnelrpc/metrics"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tunnelrpc/pogs"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tunnelrpc"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tunnelrpc/metrics"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tunnelrpc/pogs"
 )
 
 // CloudflaredClient calls capnp rpc methods of SessionManager and ConfigurationManager.

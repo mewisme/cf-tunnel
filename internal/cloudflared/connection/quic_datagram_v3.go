@@ -9,11 +9,11 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/ingress"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/management"
-	cfdquic "github.com/mewisme/cf-tunnel/internal/cloudflared/quic"
-	v3 "github.com/mewisme/cf-tunnel/internal/cloudflared/quic/v3"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tunnelrpc/pogs"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/ingress"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/management"
+	cfdquic "go.mewis.me/cf-tunnel/internal/cloudflared/quic"
+	v3 "go.mewis.me/cf-tunnel/internal/cloudflared/quic/v3"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tunnelrpc/pogs"
 )
 
 var (

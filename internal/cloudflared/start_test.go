@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"go.mewis.me/cf-tunnel/internal/cloudflared/ingress"
 )
 
 func TestStubIsReadyAndPreservesTerminalError(t *testing.T) {
@@ -34,6 +36,83 @@ func TestStartRejectsNonHTTPOrigin(t *testing.T) {
 	_, err := Start(context.Background(), Config{OriginURL: "tcp://127.0.0.1:1"})
 	if err == nil || !strings.Contains(err.Error(), "http or https") {
 		t.Fatalf("error: %v", err)
+	}
+}
+
+func TestNewIngressHandler(t *testing.T) {
+	called := false
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusAccepted)
+	})
+	ing, err := newIngress(Config{Handler: handler})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ing.Rules) != 1 || ing.Rules[0].Service.String() != "in-memory" {
+		t.Fatalf("unexpected ingress: %#v", ing)
+	}
+	local, ok := ing.Rules[0].Service.(http.Handler)
+	if !ok {
+		t.Fatal("in-memory origin does not serve HTTP")
+	}
+	w := httptest.NewRecorder()
+	local.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "https://example.trycloudflare.com/mcp", nil))
+	if !called || w.Code != http.StatusAccepted {
+		t.Fatalf("handler was not called: called=%t status=%d", called, w.Code)
+	}
+}
+
+func TestNewIngressURL(t *testing.T) {
+	ing, err := newIngress(Config{OriginURL: "http://127.0.0.1:8080"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ing.Rules) != 1 || ing.Rules[0].Service.String() != "http://127.0.0.1:8080" {
+		t.Fatalf("unexpected ingress: %#v", ing)
+	}
+}
+
+func TestNewIngressManagedMode(t *testing.T) {
+	ing, err := newIngress(Config{Token: "dummy"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ing.IsEmpty() {
+		t.Fatalf("expected no local ingress rules: %#v", ing)
+	}
+	for _, tc := range []Config{
+		{Token: "dummy", Handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})},
+		{Token: "dummy", OriginURL: "http://127.0.0.1:8080"},
+		{Token: "dummy", QuickService: "https://api.trycloudflare.com"},
+	} {
+		if _, err := newIngress(tc); err == nil {
+			t.Fatalf("expected conflict: %#v", tc)
+		}
+	}
+}
+
+func TestManagedDashboardIngressConfiguration(t *testing.T) {
+	var remote ingress.RemoteConfig
+	err := json.Unmarshal([]byte(`{
+		"ingress": [
+			{"hostname":"mcp.example.com","service":"http://127.0.0.1:5678"},
+			{"service":"http_status:404"}
+		]
+	}`), &remote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(remote.Ingress.Rules) != 2 {
+		t.Fatalf("unexpected rule count: %d", len(remote.Ingress.Rules))
+	}
+	rule, _ := remote.Ingress.FindMatchingRule("mcp.example.com", "/mcp")
+	if rule.Service.String() != "http://127.0.0.1:5678" {
+		t.Fatalf("wrong dashboard origin: %s", rule.Service)
+	}
+	rule, _ = remote.Ingress.FindMatchingRule("other.example.com", "/")
+	if rule.Service.String() != "http_status:404" {
+		t.Fatalf("wrong dashboard fallback: %s", rule.Service)
 	}
 }
 
@@ -75,6 +154,21 @@ func TestStartProvisionMalformed(t *testing.T) {
 		QuickService: srv.URL,
 	})
 	if err == nil || err.Error() != "failed to unmarshal quick Tunnel" {
+		t.Fatalf("error: %v", err)
+	}
+}
+
+func TestStartRejectsOversizedProvisioningResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, strings.Repeat("x", 1<<20+1))
+	}))
+	defer srv.Close()
+	_, err := Start(context.Background(), Config{
+		OriginURL:    "http://127.0.0.1:1",
+		QuickService: srv.URL,
+	})
+	if err == nil || !strings.Contains(err.Error(), "response too large") {
 		t.Fatalf("error: %v", err)
 	}
 }

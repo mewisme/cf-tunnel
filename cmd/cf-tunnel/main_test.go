@@ -10,11 +10,12 @@ import (
 	"testing"
 	"time"
 
-	cftunnel "github.com/mewisme/cf-tunnel"
+	cftunnel "go.mewis.me/cf-tunnel"
 )
 
 type fakeTunnel struct {
 	url      string
+	id       string
 	readyErr error
 	done     chan error
 }
@@ -24,6 +25,8 @@ func newFakeTunnel(url string) *fakeTunnel {
 }
 
 func (t *fakeTunnel) PublicURL() string { return t.url }
+
+func (t *fakeTunnel) TunnelID() string { return t.id }
 
 func (t *fakeTunnel) WaitUntilReady(context.Context) error { return t.readyErr }
 
@@ -76,6 +79,62 @@ func TestRunnerEmitsReadyAndStoppedForSingleOrigin(t *testing.T) {
 	}
 	if events[1].Origin != "http://127.0.0.1:37421" || events[1].URL != "https://example.trycloudflare.com" {
 		t.Fatalf("ready=%#v", events[1])
+	}
+}
+
+func TestRunnerManagedTunnelReceivesTokenWithoutExposingIt(t *testing.T) {
+	const token = "sensitive-connector-token"
+	const id = "128edfa3-4561-4d2e-ae88-8caef9b3551a"
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var out synchronizedBuffer
+	tunnel := newFakeTunnel("")
+	tunnel.id = id
+	r := runner{out: &out, start: func(_ context.Context, cfg cftunnel.Config) (runtimeTunnel, error) {
+		if cfg.Token != token || cfg.OriginURL != "" {
+			t.Errorf("unexpected tunnel config: token present=%t origin=%q", cfg.Token != "", cfg.OriginURL)
+		}
+		return tunnel, nil
+	}}
+	done := make(chan int, 1)
+	go func() { done <- r.runConfig(ctx, cftunnel.Config{Token: token}) }()
+	deadline := time.Now().Add(time.Second)
+	for !strings.Contains(out.String(), `"state":"ready"`) && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	cancel()
+	tunnel.complete(context.Canceled)
+	if code := <-done; code != 0 {
+		t.Fatalf("code=%d output=%s", code, out.String())
+	}
+	if strings.Contains(out.String(), token) {
+		t.Fatal("token leaked to lifecycle output")
+	}
+	events := decodeEvents(t, out.Bytes())
+	if len(events) != 3 || events[1].State != "ready" || events[1].TunnelID != id || events[1].Origin != "" || events[1].URL != "" {
+		t.Fatalf("unexpected lifecycle: %#v", events)
+	}
+}
+
+func TestRunRejectsConflictingFlagsWithoutLeakingToken(t *testing.T) {
+	const token = "private-cli-token"
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"--origin", "http://127.0.0.1:8080", "--token", token}, &stdout, &stderr); code != 2 {
+		t.Fatalf("code=%d", code)
+	}
+	if strings.Contains(stdout.String()+stderr.String(), token) {
+		t.Fatal("CLI token was leaked")
+	}
+}
+
+func TestRunRejectsInvalidTokenWithoutLeakingIt(t *testing.T) {
+	const token = "private-invalid-token"
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"--token", token}, &stdout, &stderr); code != 1 {
+		t.Fatalf("code=%d output=%s", code, stdout.String())
+	}
+	if strings.Contains(stdout.String()+stderr.String(), token) {
+		t.Fatal("CLI token was leaked")
 	}
 }
 

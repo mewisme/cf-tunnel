@@ -17,10 +17,10 @@ import (
 	"github.com/rs/zerolog"
 	"golang.org/x/net/http2"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/client"
-	cfdflow "github.com/mewisme/cf-tunnel/internal/cloudflared/flow"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/client"
+	cfdflow "go.mewis.me/cf-tunnel/internal/cloudflared/flow"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tracing"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tracing"
 )
 
 // note: these constants are exported so we can reuse them in the edge-side code

@@ -1,7 +1,7 @@
 using Go = import "go.capnp";
 @0xdb8274f9144abc7e;
 $Go.package("proto");
-$Go.import("github.com/mewisme/cf-tunnel/internal/cloudflared/tunnelrpc");
+$Go.import("go.mewis.me/cf-tunnel/internal/cloudflared/tunnelrpc");
 
 # === DEPRECATED Legacy Tunnel Authentication and Registration methods/servers ===
 #

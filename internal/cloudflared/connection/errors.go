@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	tunnelpogs "github.com/mewisme/cf-tunnel/internal/cloudflared/tunnelrpc/pogs"
+	tunnelpogs "go.mewis.me/cf-tunnel/internal/cloudflared/tunnelrpc/pogs"
 )
 
 const (

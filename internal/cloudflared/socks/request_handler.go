@@ -10,7 +10,7 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/ipaccess"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/ipaccess"
 )
 
 // RequestHandler is the functions needed to handle a SOCKS5 command

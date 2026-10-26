@@ -8,9 +8,9 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/management"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tunnelrpc"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tunnelrpc/pogs"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/management"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tunnelrpc"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tunnelrpc/pogs"
 )
 
 // registerClient derives a named tunnel rpc client that can then be used to register and unregister connections.

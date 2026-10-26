@@ -1,6 +1,6 @@
-module github.com/mewisme/cf-tunnel
+module go.mewis.me/cf-tunnel
 
-go 1.27.0
+go 1.27.3
 
 require (
 	github.com/gobwas/ws v1.2.1

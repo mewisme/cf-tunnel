@@ -6,8 +6,8 @@ import (
 	"io"
 	"time"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tunnelrpc"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tunnelrpc/pogs"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tunnelrpc"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tunnelrpc/pogs"
 )
 
 // HandleRequestFunc wraps the proxied request from the upstream and also provides methods on the stream to

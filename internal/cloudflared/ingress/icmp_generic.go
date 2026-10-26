@@ -11,7 +11,7 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/packet"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/packet"
 )
 
 var errICMPProxyNotImplemented = fmt.Errorf("ICMP proxy is not implemented on %s %s", runtime.GOOS, runtime.GOARCH)

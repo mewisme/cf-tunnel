@@ -16,9 +16,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tracing"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/tunnelrpc/pogs"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/websocket"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tracing"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/tunnelrpc/pogs"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/websocket"
 )
 
 const (

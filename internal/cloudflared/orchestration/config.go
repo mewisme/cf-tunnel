@@ -3,8 +3,8 @@ package orchestration
 import (
 	"encoding/json"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/config"
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/ingress"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/config"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/ingress"
 )
 
 type newRemoteConfig struct {

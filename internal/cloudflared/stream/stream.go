@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
-	"github.com/mewisme/cf-tunnel/internal/cloudflared/cfio"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/cfio"
 )
 
 type Stream interface {

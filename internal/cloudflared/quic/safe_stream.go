@@ -99,6 +99,13 @@ func (s *SafeStreamCloser) CloseWrite() error {
 	return s.stream.Close()
 }
 
+// CloseRead releases only the receive half of the stream. A response can
+// still be written to the peer after an HTTP request body has been closed.
+func (s *SafeStreamCloser) CloseRead() error {
+	s.stream.CancelRead(0)
+	return nil
+}
+
 func (s *SafeStreamCloser) SetDeadline(deadline time.Time) error {
 	return s.stream.SetDeadline(deadline)
 }

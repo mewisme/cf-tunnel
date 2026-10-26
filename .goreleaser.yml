@@ -24,9 +24,9 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X github.com/mewisme/cf-tunnel/internal/buildinfo.version={{.Version}}
-      - -X github.com/mewisme/cf-tunnel/internal/buildinfo.commit={{.Commit}}
-      - -X github.com/mewisme/cf-tunnel/internal/buildinfo.date={{.Date}}
+      - -X go.mewis.me/cf-tunnel/internal/buildinfo.version={{.Version}}
+      - -X go.mewis.me/cf-tunnel/internal/buildinfo.commit={{.Commit}}
+      - -X go.mewis.me/cf-tunnel/internal/buildinfo.date={{.Date}}
 
 upx:
   - enabled: true
