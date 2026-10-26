@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -41,6 +43,7 @@ type Orchestrator struct {
 	// Origin dialer service to manage egress socket dialing.
 	originDialerService *ingress.OriginDialerService
 	log                 *zerolog.Logger
+	managedHandler      http.Handler
 
 	// orchestrator must not handle any more updates after shutdownC is closed
 	shutdownC <-chan struct{}
@@ -65,6 +68,7 @@ func NewOrchestrator(ctx context.Context,
 		flowLimiter:         cfdflow.NewLimiter(config.WarpRouting.MaxActiveFlows),
 		originDialerService: config.OriginDialerService,
 		log:                 log,
+		managedHandler:      config.ManagedHandler,
 		shutdownC:           ctx.Done(),
 	}
 	if err := o.updateIngress(*config.Ingress, config.WarpRouting); err != nil {
@@ -158,6 +162,11 @@ func (o *Orchestrator) updateIngress(ingressRules ingress.Ingress, warpRouting i
 
 	// Assign the internal ingress rules to the parsed ingress
 	ingressRules.InternalRules = o.internalRules
+	if o.managedHandler != nil {
+		if err := useManagedHandler(&ingressRules, o.managedHandler); err != nil {
+			return err
+		}
+	}
 
 	// Check if ingress rules are empty, and add the default route if so.
 	if ingressRules.IsEmpty() {
@@ -184,8 +193,11 @@ func (o *Orchestrator) updateIngress(ingressRules ingress.Ingress, warpRouting i
 	o.originDialerService.UpdateDefaultDialer(ingress.NewDialer(warpRouting))
 
 	// Create and replace the origin proxy with a new instance
-	proxy := proxy.NewOriginProxy(ingressRules, o.originDialerService, o.tags, o.flowLimiter, o.log)
-	o.proxy.Store(proxy)
+	var originProxy connection.OriginProxy = proxy.NewOriginProxy(ingressRules, o.originDialerService, o.tags, o.flowLimiter, o.log)
+	if o.managedHandler != nil {
+		originProxy = &httpOnlyProxy{OriginProxy: originProxy}
+	}
+	o.proxy.Store(originProxy)
 	o.config.Ingress = &ingressRules
 	o.config.WarpRouting = warpRouting
 
@@ -195,6 +207,45 @@ func (o *Orchestrator) updateIngress(ingressRules ingress.Ingress, warpRouting i
 	}
 	o.proxyShutdownC = proxyShutdownC
 	return nil
+}
+
+// useManagedHandler substitutes only remotely configured HTTP origins. Status
+// fallbacks and route/middleware restrictions remain intact. A remote update
+// containing other services fails closed rather than opening another origin.
+// The caller holds the Orchestrator write lock and uses a fresh ingress value.
+func useManagedHandler(ing *ingress.Ingress, handler http.Handler) error {
+	for i := range ing.Rules {
+		svc := ing.Rules[i].Service
+		if svc == nil {
+			return fmt.Errorf("managed in-memory ingress rule %d has no service", i)
+		}
+		name := svc.String()
+		if strings.HasPrefix(name, "http_status:") {
+			continue
+		}
+		if _, ok := svc.(ingress.HTTPOriginProxy); !ok || !managedHTTPService(name) {
+			return fmt.Errorf("managed in-memory ingress rule %d requires an HTTP(S)/WebSocket origin or http_status", i)
+		}
+		ing.Rules[i].Service = ingress.NewHandlerService(handler)
+	}
+	return nil
+}
+
+func managedHTTPService(service string) bool {
+	for _, scheme := range []string{"http://", "https://", "ws://", "wss://"} {
+		if strings.HasPrefix(service, scheme) {
+			return true
+		}
+	}
+	return false
+}
+
+// httpOnlyProxy denies private-network TCP streams even when the Dashboard
+// sends warp-routing config. An in-memory HTTP connector cannot dial origins.
+type httpOnlyProxy struct{ connection.OriginProxy }
+
+func (*httpOnlyProxy) ProxyTCP(context.Context, connection.ReadWriteAcker, *connection.TCPRequest) error {
+	return fmt.Errorf("TCP proxying is disabled for an in-memory managed tunnel")
 }
 
 // GetConfigJSON returns the current json serialization of the config as the edge understands it

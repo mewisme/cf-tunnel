@@ -43,12 +43,12 @@ func TestPublicModuleRejectsTokenWithOrigin(t *testing.T) {
 	}
 }
 
-func TestPublicModuleRejectsTokenWithHandler(t *testing.T) {
+func TestPublicModuleAllowsTokenWithHandlerBeforeTokenValidation(t *testing.T) {
 	_, err := cftunnel.Start(context.Background(), cftunnel.Config{
 		Token:   "secret-must-not-appear",
 		Handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
 	})
-	if err == nil || !strings.Contains(err.Error(), "cannot be combined") || strings.Contains(err.Error(), "secret-must-not-appear") {
+	if err == nil || !strings.Contains(err.Error(), "invalid tunnel token") || strings.Contains(err.Error(), "secret-must-not-appear") {
 		t.Fatalf("error = %v", err)
 	}
 }

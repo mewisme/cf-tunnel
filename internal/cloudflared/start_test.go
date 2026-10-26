@@ -92,10 +92,18 @@ func TestNewIngressManagedMode(t *testing.T) {
 	if !ing.IsEmpty() {
 		t.Fatalf("expected no local ingress rules: %#v", ing)
 	}
+	handler := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
+	ing, err = newIngress(Config{Token: "dummy", Handler: handler})
+	if err != nil || !ing.IsEmpty() {
+		t.Fatalf("managed handler must use Dashboard ingress: %+v %v", ing, err)
+	}
+	if managedHandler(Config{Token: "dummy", Handler: handler}) == nil || managedHandler(Config{Handler: handler}) != nil {
+		t.Fatal("managed handler must only be attached to token tunnel")
+	}
 	for _, tc := range []Config{
-		{Token: "dummy", Handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})},
 		{Token: "dummy", OriginURL: "http://127.0.0.1:8080"},
 		{Token: "dummy", QuickService: "https://api.trycloudflare.com"},
+		{Token: "dummy", Handler: handler, QuickService: "https://api.trycloudflare.com"},
 	} {
 		if _, err := newIngress(tc); err == nil {
 			t.Fatalf("expected conflict: %#v", tc)

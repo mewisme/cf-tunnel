@@ -20,10 +20,12 @@ type Config struct {
 	// Set either OriginURL or Handler, not both.
 	OriginURL string
 	// Handler serves requests in-process without opening a local HTTP listener.
+	// With Token, it replaces Dashboard HTTP(S)/WebSocket origins while
+	// preserving Dashboard hostname/path matches and HTTP status fallbacks.
 	Handler http.Handler
 	// Token connects an existing Dashboard-managed Cloudflare Tunnel.
-	// Managed tunnel ingress rules are received from Cloudflare; do not set
-	// OriginURL or Handler with Token.
+	// Managed tunnel ingress rules are received from Cloudflare. OriginURL
+	// cannot be combined with Token; Handler is optional in managed mode.
 	Token string
 	// QuickService overrides the provisioning service. Empty uses
 	// DefaultQuickService. This is primarily useful for tests and compatible

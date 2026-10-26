@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"encoding/json"
+	"net/http"
 
 	"go.mewis.me/cf-tunnel/internal/cloudflared/config"
 	"go.mewis.me/cf-tunnel/internal/cloudflared/ingress"
@@ -22,6 +23,8 @@ type Config struct {
 	Ingress             *ingress.Ingress
 	WarpRouting         ingress.WarpRoutingConfig
 	OriginDialerService *ingress.OriginDialerService
+	// ManagedHandler is per-connector; it is not part of the remote config.
+	ManagedHandler http.Handler
 
 	// Extra settings used to configure this instance but that are not eligible for remotely management
 	// ie. (--protocol, --loglevel, ...)

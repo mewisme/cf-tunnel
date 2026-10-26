@@ -120,11 +120,12 @@ Configure public hostnames and their local service URLs (for example,
 automatically receives the remote ingress rules and subsequent updates. You
 do not need to install a system service, create a local ingress config file, or
 specify a local port on the `cf-tunnel` command line. The origin server
-configured on the dashboard must still be running and reachable.
+configured on the dashboard must still be running and reachable in binary or
+Go token-only mode. A Go `Token+Handler` connector does not dial this origin.
 
-Use **either** `--token` or `--origin`. The minimal runtime keeps one QUIC
-edge connection. Token mode supports remotely managed HTTP(S)/WebSocket
-origins; it does not add Cloudflare account login, service installation, or
+Use **either** `--token` or `--origin` with the standalone binary. The
+minimal runtime keeps one QUIC edge connection. Token mode supports remotely
+managed HTTP(S)/WebSocket origins; it does not add Cloudflare account login, service installation, or
 private-network routing management. Remote ingress rules requiring
 `originRequest.access.required` (origin-side Cloudflare Access JWT verification)
 are **not supported** and fail closed with HTTP 403; Edge-enforced Access
@@ -214,8 +215,8 @@ return tunnel.Wait()
 Import `os` for the environment variable. The caller owns the context and
 shutdown. The registered hostname(s), local origin URLs, and their updates are
 managed by Cloudflare. `PublicURL()` is empty in managed mode; retrieve
-the URL(s) from your Dashboard. Do not combine `Token` with `OriginURL`,
-`Handler`, or `QuickService`.
+the URL(s) from your Dashboard. Do not combine `Token` with `OriginURL`
+or `QuickService`; optionally combine `Token` with `Handler` as below.
 
 You can inspect a token without connecting or verify it with a short-lived
 Cloudflare Edge registration:
@@ -240,6 +241,56 @@ log.Printf("verified=%t edge=%s", verification.Verified, verification.EdgeLocati
 Import `time` to use a deadline. `VerifyToken` defaults to a 30-second
 timeout when the caller supplies no deadline; it closes its temporary connector
 before returning and does not require a separately running tunnel.
+
+### Dashboard-managed tunnel with an in-memory Go handler
+
+A managed connector can directly serve your `http.Handler` inside the Go
+process without `net.Listen`, `http.Server.ListenAndServe`, a loopback port,
+a Unix socket, or a separate origin process:
+
+```go
+handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json")
+    _, _ = w.Write([]byte(`{"ok":true}`))
+})
+tunnel, err := cftunnel.Start(ctx, cftunnel.Config{
+    Token:   os.Getenv("CF_TUNNEL_TOKEN"),
+    Handler: handler,
+})
+if err != nil {
+    return err
+}
+if err := tunnel.WaitUntilReady(ctx); err != nil {
+    return err
+}
+log.Printf("managed tunnel %s connected", tunnel.TunnelID())
+return tunnel.Wait()
+```
+
+Import `net/http` and `os`; the caller owns `ctx`. Configure a public hostname
+and an HTTP(S) or WebSocket service in the Cloudflare Dashboard. Its service
+URL is used only to identify an HTTP-compatible ingress rule; requests go
+**directly** to `Handler` instead of dialing that URL. No local HTTP listener
+is started, even if the Dashboard origin URL points at localhost.
+
+Dashboard hostname/path matching, rule ordering, `http_status:` fallbacks,
+and compatible middleware continue to apply. Before valid remote rules are
+received, the connector returns 503 rather than exposing the handler
+globally. Later Dashboard ingress changes are applied atomically. Remote
+non-HTTP services (TCP, Unix socket, bastion and hello-world origins) are
+rejected in this mode, retaining the last accepted configuration; tunneled
+private-network TCP flows are denied. This restriction only applies to
+`Token+Handler`: existing `Token`-only mode keeps its normal remote origin
+behavior. Use separate `Start` calls and contexts to run managed, Quick, and
+in-memory tunnels concurrently.
+
+`Handler` must safely handle concurrent requests. Cloudflare's public
+hostname remains publicly reachable unless protected by Dashboard access
+policy or application-level authentication. Origin-side `access.required`
+is not supported and denies requests as documented above. There is still
+an **outbound** QUIC connection to Cloudflare; “in-memory” applies to the
+origin service, not the edge transport. `PublicURL()` stays empty in
+managed mode and `TunnelID()` identifies the configured tunnel.
 
 ### In-memory HTTP origin
 

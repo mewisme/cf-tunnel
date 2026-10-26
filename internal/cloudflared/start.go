@@ -228,6 +228,7 @@ func Start(ctx context.Context, cfg Config) (*Tunnel, error) {
 		Ingress:             &ing,
 		WarpRouting:         warpRouting,
 		OriginDialerService: originDialer,
+		ManagedHandler:      managedHandler(cfg),
 	}, tunnelConfig.Tags, nil, &log)
 	if err != nil {
 		return nil, err
@@ -252,8 +253,8 @@ func Start(ctx context.Context, cfg Config) (*Tunnel, error) {
 
 func newIngress(cfg Config) (ingress.Ingress, error) {
 	if cfg.Token != "" {
-		if cfg.OriginURL != "" || cfg.Handler != nil {
-			return ingress.Ingress{}, fmt.Errorf("token cannot be combined with origin URL or handler")
+		if cfg.OriginURL != "" {
+			return ingress.Ingress{}, fmt.Errorf("token cannot be combined with origin URL")
 		}
 		if cfg.QuickService != "" {
 			return ingress.Ingress{}, fmt.Errorf("quick service cannot be combined with token")
@@ -275,6 +276,15 @@ func newIngress(cfg Config) (ingress.Ingress, error) {
 	return ingress.ParseIngress(&cfconfig.Configuration{
 		Ingress: []cfconfig.UnvalidatedIngressRule{{Service: origin}},
 	})
+}
+
+// Only managed connectors override remotely configured origins. Quick Tunnel
+// handlers retain their normal single local ingress route.
+func managedHandler(cfg Config) http.Handler {
+	if cfg.Token == "" {
+		return nil
+	}
+	return cfg.Handler
 }
 
 func validateOriginURL(raw string) (string, error) {
