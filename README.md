@@ -84,6 +84,37 @@ cf-tunnel --token '<tunnel-token>'
 Environment variables can also be inspected by sufficiently privileged local
 processes; restrict access to the connector's runtime environment.
 
+### Inspect or verify a Dashboard connector token
+
+Use the same `CF_TUNNEL_TOKEN` environment variable with the token commands:
+
+```bash
+cf-tunnel token inspect
+cf-tunnel token verify --timeout 30s
+```
+
+`token inspect` is **offline**: it validates the connector token format and
+prints safe metadata only (account ID, tunnel ID, optional endpoint):
+
+```json
+{"account_id":"example-account","tunnel_id":"2bfc84a2-8393-46b7-b3f5-56f7c778a311"}
+```
+
+`token verify` temporarily registers one connector with Cloudflare Edge,
+closes it, and returns one JSON object. A successful registration includes
+`"verified":true` and the edge location when available:
+
+```json
+{"account_id":"example-account","tunnel_id":"2bfc84a2-8393-46b7-b3f5-56f7c778a311","verified":true,"edge_location":"SIN"}
+```
+
+An invalid token structure or failed verification produces JSON with a
+machine-readable `error` and exit status 1. An unreachable Edge or a
+timeout **does not establish that a token is revoked**; it means verification
+could not be completed. Successful verification does not prove Dashboard routes
+or local origin services are reachable. These commands use no Cloudflare
+management API token and do not expose the connector secret.
+
 Configure public hostnames and their local service URLs (for example,
 `http://127.0.0.1:8080`) on the Cloudflare Dashboard. The connector
 automatically receives the remote ingress rules and subsequent updates. You
@@ -185,6 +216,30 @@ shutdown. The registered hostname(s), local origin URLs, and their updates are
 managed by Cloudflare. `PublicURL()` is empty in managed mode; retrieve
 the URL(s) from your Dashboard. Do not combine `Token` with `OriginURL`,
 `Handler`, or `QuickService`.
+
+You can inspect a token without connecting or verify it with a short-lived
+Cloudflare Edge registration:
+
+```go
+token := os.Getenv("CF_TUNNEL_TOKEN")
+info, err := cftunnel.ParseToken(token)
+if err != nil {
+    return err
+}
+log.Printf("tunnel=%s account=%s", info.TunnelID, info.AccountID)
+
+ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+defer cancel()
+verification, err := cftunnel.VerifyToken(ctx, token)
+if err != nil {
+    return err // offline parse, network, authorization, or timeout failure
+}
+log.Printf("verified=%t edge=%s", verification.Verified, verification.EdgeLocation)
+```
+
+Import `time` to use a deadline. `VerifyToken` defaults to a 30-second
+timeout when the caller supplies no deadline; it closes its temporary connector
+before returning and does not require a separately running tunnel.
 
 ### In-memory HTTP origin
 

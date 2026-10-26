@@ -47,14 +47,23 @@ type Config struct {
 
 // Tunnel is one ephemeral Quick Tunnel. Cancel the Start context to shut it down.
 type Tunnel struct {
-	URL string
-	ID  string
+	URL      string
+	ID       string
+	observer *connection.Observer
 
 	ready <-chan struct{}
 	done  chan struct{}
 	once  sync.Once
 	mu    sync.RWMutex
 	err   error
+}
+
+// EdgeLocation reports the location of the registered Cloudflare edge, if any.
+func (t *Tunnel) EdgeLocation() string {
+	if t == nil || t.observer == nil {
+		return ""
+	}
+	return t.observer.EdgeLocation()
 }
 
 func (t *Tunnel) Wait() error {
@@ -188,7 +197,7 @@ func Start(ctx context.Context, cfg Config) (*Tunnel, error) {
 	dnsService := origins.NewDNSResolverService(origins.NewDNSDialer(), &log, origins.NewMetrics(prometheus.NewRegistry()))
 	originDialer.AddReservedService(dnsService, []netip.AddrPort{origins.VirtualDNSServiceAddr})
 
-	observer := connection.NewObserver(&log)
+	observer := connection.NewObserverWithContext(ctx, &log)
 	namedTunnel := &connection.TunnelProperties{Credentials: credentials}
 	if provisioned != nil {
 		observer.SendURL(provisioned.hostname)
@@ -226,8 +235,9 @@ func Start(ctx context.Context, cfg Config) (*Tunnel, error) {
 
 	connectedSignal := signal.New(make(chan struct{}))
 	t := &Tunnel{
-		ready: connectedSignal.Wait(),
-		done:  make(chan struct{}),
+		ready:    connectedSignal.Wait(),
+		done:     make(chan struct{}),
+		observer: observer,
 	}
 	if provisioned != nil {
 		t.URL = provisioned.url

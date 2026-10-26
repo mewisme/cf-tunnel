@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -12,6 +13,103 @@ import (
 
 	cftunnel "go.mewis.me/cf-tunnel"
 )
+
+func testConnectorToken(t *testing.T) string {
+	t.Helper()
+	data, err := json.Marshal(map[string]string{
+		"a": "test-account",
+		"t": "7af68d8a-91bf-4835-a369-3f15cd36ae91",
+		"s": base64.StdEncoding.EncodeToString([]byte("test-secret-not-visible")),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return base64.StdEncoding.EncodeToString(data)
+}
+
+func TestTokenInspectCommandOffline(t *testing.T) {
+	token := testConnectorToken(t)
+	t.Setenv("CF_TUNNEL_TOKEN", token)
+	var out, stderr bytes.Buffer
+	if code := run([]string{"token", "inspect"}, &out, &stderr); code != 0 {
+		t.Fatalf("code=%d stderr=%q", code, stderr.String())
+	}
+	var info cftunnel.TokenInfo
+	if err := json.Unmarshal(out.Bytes(), &info); err != nil {
+		t.Fatal(err)
+	}
+	if info.AccountID != "test-account" || info.TunnelID != "7af68d8a-91bf-4835-a369-3f15cd36ae91" {
+		t.Fatalf("info=%+v", info)
+	}
+	if strings.Contains(out.String(), token) || strings.Contains(out.String(), "test-secret-not-visible") {
+		t.Fatal("inspect leaked connector secret")
+	}
+}
+
+func TestTokenVerifyCommandConnectsAndPrintsVerified(t *testing.T) {
+	token := testConnectorToken(t)
+	var out, stderr bytes.Buffer
+	called := false
+	code := runTokenCommand([]string{"verify", "--token", token, "--timeout", "1s"}, &out, &stderr, func(_ context.Context, raw string) (*cftunnel.VerificationResult, error) {
+		called = true
+		if raw != token {
+			t.Fatal("wrong token forwarded")
+		}
+		return &cftunnel.VerificationResult{
+			TokenInfo:    cftunnel.TokenInfo{AccountID: "test-account", TunnelID: "7af68d8a-91bf-4835-a369-3f15cd36ae91"},
+			Verified:     true,
+			EdgeLocation: "SIN",
+		}, nil
+	})
+	if code != 0 || !called {
+		t.Fatalf("code=%d called=%t stderr=%q", code, called, stderr.String())
+	}
+	var got cftunnel.VerificationResult
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.Verified || got.EdgeLocation != "SIN" || strings.Contains(out.String(), token) || strings.Contains(out.String(), "test-secret-not-visible") {
+		t.Fatalf("output=%q", out.String())
+	}
+}
+
+func TestTokenVerifyUnavailableIsNotVerifiedAndDoesNotLeak(t *testing.T) {
+	token := testConnectorToken(t)
+	var out, stderr bytes.Buffer
+	code := runTokenCommand([]string{"verify", "--token", token}, &out, &stderr, func(context.Context, string) (*cftunnel.VerificationResult, error) {
+		return nil, errors.New("secret-must-not-appear")
+	})
+	if code != 1 || !strings.Contains(out.String(), `"verified":false`) || !strings.Contains(out.String(), `"error":"verification_failed"`) {
+		t.Fatalf("code=%d output=%q", code, out.String())
+	}
+	if strings.Contains(out.String()+stderr.String(), token) || strings.Contains(out.String()+stderr.String(), "secret-must-not-appear") {
+		t.Fatal("token verification error leaked a secret")
+	}
+}
+
+func TestTokenVerifyRejectsInvalidFlagsAndInput(t *testing.T) {
+	token := testConnectorToken(t)
+	never := func(context.Context, string) (*cftunnel.VerificationResult, error) {
+		t.Fatal("verify callback should not run")
+		return nil, nil
+	}
+	for _, args := range [][]string{
+		{"inspect", "--token", "private-invalid-token"},
+		{"verify", "--token", "private-invalid-token"},
+	} {
+		var out, stderr bytes.Buffer
+		if code := runTokenCommand(args, &out, &stderr, never); code != 1 || !strings.Contains(out.String(), "invalid_token") {
+			t.Fatalf("args=%v code=%d output=%q", args[:1], code, out.String())
+		}
+		if strings.Contains(out.String()+stderr.String(), "private-invalid-token") {
+			t.Fatal("invalid token leaked")
+		}
+	}
+	var out, stderr bytes.Buffer
+	if code := runTokenCommand([]string{"verify", "--token", token, "--timeout", "0s"}, &out, &stderr, never); code != 2 {
+		t.Fatalf("invalid timeout code=%d", code)
+	}
+}
 
 type fakeTunnel struct {
 	url      string

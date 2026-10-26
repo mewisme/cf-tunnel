@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	cftunnel "go.mewis.me/cf-tunnel"
 	"go.mewis.me/cf-tunnel/internal/buildinfo"
@@ -42,6 +43,9 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "token" {
+		return runTokenCommand(args[1:], stdout, stderr, cftunnel.VerifyToken)
+	}
 	flags := flag.NewFlagSet("cf-tunnel", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	origin := flags.String("origin", "", "single local HTTP origin to expose")
@@ -69,6 +73,90 @@ func run(args []string, stdout, stderr io.Writer) int {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	return runner{start: startQuickTunnel, out: stdout}.runConfig(ctx, cfg)
+}
+
+type tokenCommandResponse struct {
+	cftunnel.VerificationResult
+	Error string `json:"error,omitempty"`
+}
+
+type verifyFunc func(context.Context, string) (*cftunnel.VerificationResult, error)
+
+// runTokenCommand prints one JSON object; no token or tunnel secret is output.
+// "inspect" only decodes credentials, while "verify" makes an authenticated,
+// short-lived Cloudflare Edge connection.
+func runTokenCommand(args []string, stdout, stderr io.Writer, verify verifyFunc) int {
+	if len(args) == 0 || (args[0] != "inspect" && args[0] != "verify") {
+		_, _ = fmt.Fprintln(stderr, "usage: cf-tunnel token inspect|verify [--token TOKEN] [--timeout 30s]")
+		return 2
+	}
+	action := args[0]
+	flags := flag.NewFlagSet("cf-tunnel token "+action, flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	raw := flags.String("token", "", "connector token (prefer CF_TUNNEL_TOKEN)")
+	timeout := flags.Duration("timeout", 30*time.Second, "verification deadline")
+	if err := flags.Parse(args[1:]); err != nil {
+		return 2
+	}
+	if flags.NArg() > 0 {
+		_, _ = fmt.Fprintln(stderr, "unexpected positional argument")
+		return 2
+	}
+	token := strings.TrimSpace(*raw)
+	if token == "" {
+		token = strings.TrimSpace(os.Getenv("CF_TUNNEL_TOKEN"))
+	}
+	if token == "" {
+		_, _ = fmt.Fprintln(stderr, "token is required (--token or CF_TUNNEL_TOKEN)")
+		return 2
+	}
+	encoder := json.NewEncoder(stdout)
+	info, err := cftunnel.ParseToken(token)
+	if err != nil {
+		_ = encoder.Encode(tokenCommandResponse{Error: "invalid_token"})
+		return 1
+	}
+	if action == "inspect" {
+		if err := encoder.Encode(info); err != nil {
+			return 1
+		}
+		return 0
+	}
+	if *timeout <= 0 {
+		_, _ = fmt.Fprintln(stderr, "timeout must be greater than zero")
+		return 2
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	ctx, cancel := context.WithTimeout(ctx, *timeout)
+	defer cancel()
+	result, err := verify(ctx, token)
+	if err != nil {
+		response := tokenCommandResponse{
+			VerificationResult: cftunnel.VerificationResult{TokenInfo: info},
+			Error:              "verification_failed",
+		}
+		if result != nil {
+			response.VerificationResult = *result
+		}
+		response.Verified = false
+		if ctx.Err() != nil {
+			response.Error = "verification_timeout_or_cancelled"
+		}
+		_ = encoder.Encode(response)
+		return 1
+	}
+	if result == nil || !result.Verified {
+		_ = encoder.Encode(tokenCommandResponse{
+			VerificationResult: cftunnel.VerificationResult{TokenInfo: info},
+			Error:              "verification_failed",
+		})
+		return 1
+	}
+	if err := encoder.Encode(result); err != nil {
+		return 1
+	}
+	return 0
 }
 
 func startQuickTunnel(ctx context.Context, cfg cftunnel.Config) (runtimeTunnel, error) {

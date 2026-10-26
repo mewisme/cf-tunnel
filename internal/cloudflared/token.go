@@ -15,6 +15,9 @@ import (
 // Avoid exposing the original token or its decoded contents in errors.
 func parseTunnelToken(raw string) (connection.Credentials, error) {
 	raw = strings.TrimSpace(raw)
+	if len(raw) > 16*1024 {
+		return connection.Credentials{}, fmt.Errorf("invalid tunnel token encoding")
+	}
 	content, err := base64.StdEncoding.DecodeString(raw)
 	if err != nil {
 		return connection.Credentials{}, fmt.Errorf("invalid tunnel token encoding")
@@ -27,4 +30,25 @@ func parseTunnelToken(raw string) (connection.Credentials, error) {
 		return connection.Credentials{}, fmt.Errorf("incomplete tunnel token credentials")
 	}
 	return token.Credentials(), nil
+}
+
+// TokenInfo exposes safe metadata, never the embedded tunnel secret.
+type TokenInfo struct {
+	AccountID string `json:"account_id"`
+	TunnelID  string `json:"tunnel_id"`
+	Endpoint  string `json:"endpoint,omitempty"`
+}
+
+// ParseToken checks the token structure locally. It does not prove Cloudflare
+// currently accepts these credentials.
+func ParseToken(raw string) (TokenInfo, error) {
+	credentials, err := parseTunnelToken(raw)
+	if err != nil {
+		return TokenInfo{}, err
+	}
+	return TokenInfo{
+		AccountID: credentials.AccountTag,
+		TunnelID:  credentials.TunnelID.String(),
+		Endpoint:  credentials.Endpoint,
+	}, nil
 }

@@ -77,6 +77,15 @@ func (t *Tunnel) PublicURL() string {
 	return t.URL
 }
 
+// EdgeLocation returns the Cloudflare edge location after successful
+// registration. It is empty before a connection is established.
+func (t *Tunnel) EdgeLocation() string {
+	if t == nil || t.inner == nil {
+		return ""
+	}
+	return t.inner.EdgeLocation()
+}
+
 // Wait blocks until the tunnel stops and returns the terminal runtime error.
 func (t *Tunnel) Wait() error {
 	if t == nil || t.inner == nil {
