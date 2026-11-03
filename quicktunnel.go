@@ -45,6 +45,20 @@ type Tunnel struct {
 	inner *cloudflared.Tunnel
 }
 
+// Route is one Dashboard ingress rule. An empty hostname is a catch-all.
+// Service excludes URL credentials, paths, queries, and fragments.
+type Route struct {
+	Hostname string `json:"hostname,omitempty"`
+	Path     string `json:"path,omitempty"`
+	Service  string `json:"service"`
+}
+
+// RouteConfig is the most recently applied remote configuration snapshot.
+type RouteConfig struct {
+	Version int32   `json:"version"`
+	Routes  []Route `json:"routes"`
+}
+
 // Start starts an anonymous Quick Tunnel or a Dashboard-managed tunnel.
 func Start(ctx context.Context, cfg Config) (*Tunnel, error) {
 	if ctx == nil {
@@ -86,6 +100,34 @@ func (t *Tunnel) EdgeLocation() string {
 		return ""
 	}
 	return t.inner.EdgeLocation()
+}
+
+// Routes returns the last accepted Dashboard ingress snapshot. ok=false means
+// no remote configuration has been applied or this is a Quick Tunnel.
+// Each call returns an independent copy; later Dashboard updates are reflected.
+func (t *Tunnel) Routes() (config RouteConfig, ok bool) {
+	if t == nil || t.inner == nil {
+		return RouteConfig{}, false
+	}
+	version, routes, ok := t.inner.Routes()
+	if !ok {
+		return RouteConfig{}, false
+	}
+	config.Version = version
+	config.Routes = make([]Route, len(routes))
+	for i, route := range routes {
+		config.Routes[i] = Route{Hostname: route.Hostname, Path: route.Path, Service: route.Service}
+	}
+	return config, true
+}
+
+// WaitUntilConfigured waits for the first successfully applied Dashboard
+// configuration. Edge readiness alone does not guarantee routes were received.
+func (t *Tunnel) WaitUntilConfigured(ctx context.Context) error {
+	if t == nil || t.inner == nil {
+		return errors.New("managed tunnel is not initialized")
+	}
+	return t.inner.WaitUntilConfigured(ctx)
 }
 
 // Wait blocks until the tunnel stops and returns the terminal runtime error.

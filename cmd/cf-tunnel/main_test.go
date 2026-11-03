@@ -27,6 +27,68 @@ func testConnectorToken(t *testing.T) string {
 	return base64.StdEncoding.EncodeToString(data)
 }
 
+type fakeRouteTunnel struct {
+	config cftunnel.RouteConfig
+	err    error
+	waited bool
+}
+
+func (t *fakeRouteTunnel) WaitUntilConfigured(context.Context) error { return t.err }
+func (t *fakeRouteTunnel) Routes() (cftunnel.RouteConfig, bool)      { return t.config, t.err == nil }
+func (t *fakeRouteTunnel) Wait() error                               { t.waited = true; return nil }
+
+func TestRoutesCommandReadsDashboardConfigAndClosesConnection(t *testing.T) {
+	token := testConnectorToken(t)
+	t.Setenv("CF_TUNNEL_TOKEN", token)
+	var out, stderr bytes.Buffer
+	fake := &fakeRouteTunnel{config: cftunnel.RouteConfig{
+		Version: 7, Routes: []cftunnel.Route{{Hostname: "http.example.com", Service: "http://localhost:5555"}, {Service: "http_status:404"}},
+	}}
+	code := runRoutesCommand(nil, &out, &stderr, func(ctx context.Context, cfg cftunnel.Config) (routeTunnel, error) {
+		if cfg.Token != token || cfg.OriginURL != "" {
+			t.Fatalf("invalid config %+v", cfg)
+		}
+		return fake, nil
+	})
+	if code != 0 || !fake.waited {
+		t.Fatalf("code=%d waited=%t stderr=%q", code, fake.waited, stderr.String())
+	}
+	var result routesResponse
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Version != 7 || len(result.Routes) != 2 || result.Routes[0].Service != "http://localhost:5555" || result.TunnelID == "" {
+		t.Fatalf("unexpected routes %+v", result)
+	}
+	if strings.Contains(out.String()+stderr.String(), token) || strings.Contains(out.String()+stderr.String(), "test-secret-not-visible") {
+		t.Fatal("routes command leaked credentials")
+	}
+}
+
+func TestRoutesCommandUnavailableDoesNotLeakError(t *testing.T) {
+	token := testConnectorToken(t)
+	var out, stderr bytes.Buffer
+	fake := &fakeRouteTunnel{err: errors.New("remote-secret-should-not-appear")}
+	code := runRoutesCommand([]string{"--token", token, "--timeout", "1s"}, &out, &stderr,
+		func(context.Context, cftunnel.Config) (routeTunnel, error) { return fake, nil })
+	if code != 1 || !fake.waited || !strings.Contains(out.String(), `"error":"configuration_unavailable"`) {
+		t.Fatalf("code=%d output=%q", code, out.String())
+	}
+	if strings.Contains(out.String()+stderr.String(), token) || strings.Contains(out.String()+stderr.String(), "remote-secret-should-not-appear") {
+		t.Fatal("routes error leaked secrets")
+	}
+	for _, args := range [][]string{{"--token", "invalid"}, {"--token", token, "--timeout", "0s"}, {"--token", token, "extra"}} {
+		out.Reset()
+		stderr.Reset()
+		if result := runRoutesCommand(args, &out, &stderr, func(context.Context, cftunnel.Config) (routeTunnel, error) {
+			t.Fatal("unexpected connection")
+			return nil, nil
+		}); result == 0 {
+			t.Fatal("invalid invocation succeeded")
+		}
+	}
+}
+
 func TestTokenInspectCommandOffline(t *testing.T) {
 	token := testConnectorToken(t)
 	t.Setenv("CF_TUNNEL_TOKEN", token)

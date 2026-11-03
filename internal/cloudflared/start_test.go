@@ -10,7 +10,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rs/zerolog"
+
+	cfconfig "go.mewis.me/cf-tunnel/internal/cloudflared/config"
 	"go.mewis.me/cf-tunnel/internal/cloudflared/ingress"
+	"go.mewis.me/cf-tunnel/internal/cloudflared/orchestration"
 )
 
 func TestStubIsReadyAndPreservesTerminalError(t *testing.T) {
@@ -22,6 +26,46 @@ func TestStubIsReadyAndPreservesTerminalError(t *testing.T) {
 	tunnel.Complete(want)
 	if err := tunnel.Wait(); !errors.Is(err, want) {
 		t.Fatalf("Wait error = %v, want %v", err, want)
+	}
+}
+
+func TestWaitUntilConfiguredSeparatesRemoteConfigFromEdgeReadiness(t *testing.T) {
+	quick := Stub("https://quick.trycloudflare.com")
+	if _, _, ok := quick.Routes(); ok {
+		t.Fatal("quick tunnel has no Dashboard routes")
+	}
+	if err := quick.WaitUntilConfigured(context.Background()); err == nil {
+		t.Fatal("quick tunnel should reject remote config wait")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	log := zerolog.New(io.Discard)
+	initial := ingress.Ingress{}
+	warp := ingress.NewWarpRoutingConfig(&cfconfig.WarpRoutingConfig{})
+	dialer := ingress.NewOriginDialer(ingress.OriginConfig{}, &log)
+	orchestrator, err := orchestration.NewOrchestrator(ctx, &orchestration.Config{
+		Ingress: &initial, WarpRouting: warp, OriginDialerService: dialer,
+	}, nil, nil, &log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	managed := &Tunnel{managed: true, orchestrator: orchestrator, done: make(chan struct{})}
+	if _, _, ok := managed.Routes(); ok {
+		t.Fatal("remote routes visible before first update")
+	}
+	canceled, stop := context.WithCancel(ctx)
+	stop()
+	if err := managed.WaitUntilConfigured(canceled); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled wait: %v", err)
+	}
+	if response := orchestrator.UpdateConfig(0, []byte(`{"ingress":[{"hostname":"one.example.com","service":"http://localhost:5555"},{"service":"http_status:404"}]}`)); response.Err != nil {
+		t.Fatal(response.Err)
+	}
+	if err := managed.WaitUntilConfigured(ctx); err != nil {
+		t.Fatalf("ready wait: %v", err)
+	}
+	if version, routes, ok := managed.Routes(); !ok || version != 0 || len(routes) != 2 || routes[0].Service != "http://localhost:5555" {
+		t.Fatalf("version=%d routes=%+v ok=%t", version, routes, ok)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -44,6 +45,9 @@ type Orchestrator struct {
 	originDialerService *ingress.OriginDialerService
 	log                 *zerolog.Logger
 	managedHandler      http.Handler
+	// routes retains the Dashboard services before in-memory handler substitution.
+	routes      []Route
+	routesReady chan struct{}
 
 	// orchestrator must not handle any more updates after shutdownC is closed
 	shutdownC <-chan struct{}
@@ -69,6 +73,7 @@ func NewOrchestrator(ctx context.Context,
 		originDialerService: config.OriginDialerService,
 		log:                 log,
 		managedHandler:      config.ManagedHandler,
+		routesReady:         make(chan struct{}),
 		shutdownC:           ctx.Done(),
 	}
 	if err := o.updateIngress(*config.Ingress, config.WarpRouting); err != nil {
@@ -103,6 +108,14 @@ func (o *Orchestrator) UpdateConfig(version int32, config []byte) *pogs.UpdateCo
 		}
 	}
 
+	routes := make([]Route, 0, len(newConf.Ingress.Rules))
+	for _, rule := range newConf.Ingress.Rules {
+		path := ""
+		if rule.Path != nil {
+			path = rule.Path.String()
+		}
+		routes = append(routes, Route{Hostname: rule.Hostname, Path: path, Service: safeRouteService(rule.Service.String())})
+	}
 	if err := o.updateIngress(newConf.Ingress, newConf.WarpRouting); err != nil {
 		o.log.Err(err).
 			Int32("version", version).
@@ -111,6 +124,10 @@ func (o *Orchestrator) UpdateConfig(version int32, config []byte) *pogs.UpdateCo
 			LastAppliedVersion: o.currentVersion,
 			Err:                err,
 		}
+	}
+	o.routes = routes
+	if o.currentVersion < 0 {
+		close(o.routesReady)
 	}
 	o.currentVersion = version
 
@@ -121,6 +138,50 @@ func (o *Orchestrator) UpdateConfig(version int32, config []byte) *pogs.UpdateCo
 	return &pogs.UpdateConfigurationResponse{
 		LastAppliedVersion: o.currentVersion,
 	}
+}
+
+// Route is one Dashboard-provided ingress rule, including its catch-all rule.
+// URL credentials, queries, and fragments are excluded from Service.
+type Route struct {
+	Hostname string `json:"hostname,omitempty"`
+	Path     string `json:"path,omitempty"`
+	Service  string `json:"service"`
+}
+
+// Routes returns a copy of the last successfully applied remote configuration.
+// ok is false until the first Dashboard configuration arrives.
+func (o *Orchestrator) Routes() (version int32, routes []Route, ok bool) {
+	o.lock.RLock()
+	defer o.lock.RUnlock()
+	if o.currentVersion < 0 {
+		return 0, nil, false
+	}
+	return o.currentVersion, append([]Route(nil), o.routes...), true
+}
+
+func (o *Orchestrator) RoutesReady() <-chan struct{} { return o.routesReady }
+
+func safeRouteService(service string) string {
+	switch service {
+	case ingress.ServiceBastion, ingress.ServiceSocksProxy, ingress.HelloWorldService:
+		return service
+	}
+	if strings.HasPrefix(service, "http_status:") {
+		if _, err := strconv.Atoi(strings.TrimPrefix(service, "http_status:")); err == nil {
+			return service
+		}
+	}
+	if strings.HasPrefix(service, "unix+tls:") {
+		return "unix+tls:<redacted>"
+	}
+	if strings.HasPrefix(service, "unix:") {
+		return "unix:<redacted>"
+	}
+	u, err := url.Parse(service)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return "<redacted>"
+	}
+	return (&url.URL{Scheme: u.Scheme, Host: u.Host}).String()
 }
 
 // overrideRemoteWarpRoutingWithLocalValues overrides the ingress.WarpRoutingConfig that comes from the remote with

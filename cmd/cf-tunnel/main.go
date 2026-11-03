@@ -46,6 +46,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) > 0 && args[0] == "token" {
 		return runTokenCommand(args[1:], stdout, stderr, cftunnel.VerifyToken)
 	}
+	if len(args) > 0 && args[0] == "routes" {
+		return runRoutesCommand(args[1:], stdout, stderr, func(ctx context.Context, cfg cftunnel.Config) (routeTunnel, error) {
+			return cftunnel.Start(ctx, cfg)
+		})
+	}
 	flags := flag.NewFlagSet("cf-tunnel", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	origin := flags.String("origin", "", "single local HTTP origin to expose")
@@ -73,6 +78,76 @@ func run(args []string, stdout, stderr io.Writer) int {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	return runner{start: startQuickTunnel, out: stdout}.runConfig(ctx, cfg)
+}
+
+type routeTunnel interface {
+	WaitUntilConfigured(context.Context) error
+	Routes() (cftunnel.RouteConfig, bool)
+	Wait() error
+}
+
+type routeStart func(context.Context, cftunnel.Config) (routeTunnel, error)
+
+type routesResponse struct {
+	TunnelID string `json:"tunnel_id,omitempty"`
+	cftunnel.RouteConfig
+	Error string `json:"error,omitempty"`
+}
+
+// runRoutesCommand opens a short-lived connector and reads the config pushed
+// by Edge. No Cloudflare management API credentials are needed.
+func runRoutesCommand(args []string, stdout, stderr io.Writer, start routeStart) int {
+	flags := flag.NewFlagSet("cf-tunnel routes", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	raw := flags.String("token", "", "connector token (prefer CF_TUNNEL_TOKEN)")
+	timeout := flags.Duration("timeout", 30*time.Second, "wait for Dashboard ingress configuration")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if flags.NArg() != 0 || *timeout <= 0 {
+		_, _ = fmt.Fprintln(stderr, "unexpected argument or invalid timeout")
+		return 2
+	}
+	token := strings.TrimSpace(*raw)
+	if token == "" {
+		token = strings.TrimSpace(os.Getenv("CF_TUNNEL_TOKEN"))
+	}
+	if token == "" {
+		_, _ = fmt.Fprintln(stderr, "token is required (--token or CF_TUNNEL_TOKEN)")
+		return 2
+	}
+	encoder := json.NewEncoder(stdout)
+	info, err := cftunnel.ParseToken(token)
+	if err != nil {
+		_ = encoder.Encode(routesResponse{Error: "invalid_token"})
+		return 1
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	ctx, cancel := context.WithTimeout(ctx, *timeout)
+	defer cancel()
+	tunnel, err := start(ctx, cftunnel.Config{Token: token})
+	if err != nil {
+		_ = encoder.Encode(routesResponse{TunnelID: info.TunnelID, Error: "connection_failed"})
+		return 1
+	}
+	defer func() {
+		cancel()
+		_ = tunnel.Wait()
+	}()
+	if err := tunnel.WaitUntilConfigured(ctx); err != nil {
+		_ = encoder.Encode(routesResponse{TunnelID: info.TunnelID, Error: "configuration_unavailable"})
+		return 1
+	}
+	routes, ok := tunnel.Routes()
+	if !ok {
+		_ = encoder.Encode(routesResponse{TunnelID: info.TunnelID, Error: "configuration_unavailable"})
+		return 1
+	}
+	if err := encoder.Encode(routesResponse{TunnelID: info.TunnelID, RouteConfig: routes}); err != nil {
+		return 1
+	}
+	return 0
 }
 
 type tokenCommandResponse struct {

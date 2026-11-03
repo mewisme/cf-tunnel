@@ -47,9 +47,11 @@ type Config struct {
 
 // Tunnel is one ephemeral Quick Tunnel. Cancel the Start context to shut it down.
 type Tunnel struct {
-	URL      string
-	ID       string
-	observer *connection.Observer
+	URL          string
+	ID           string
+	observer     *connection.Observer
+	orchestrator *orchestration.Orchestrator
+	managed      bool
 
 	ready <-chan struct{}
 	done  chan struct{}
@@ -64,6 +66,34 @@ func (t *Tunnel) EdgeLocation() string {
 		return ""
 	}
 	return t.observer.EdgeLocation()
+}
+
+// Routes reports the applied Dashboard ingress rules. Quick Tunnels and
+// managed connectors still awaiting remote configuration return ok=false.
+func (t *Tunnel) Routes() (int32, []orchestration.Route, bool) {
+	if t == nil || !t.managed || t.orchestrator == nil {
+		return 0, nil, false
+	}
+	return t.orchestrator.Routes()
+}
+
+// WaitUntilConfigured waits for an accepted Dashboard configuration, not just
+// the first Edge connection. It does not apply to anonymous Quick Tunnels.
+func (t *Tunnel) WaitUntilConfigured(ctx context.Context) error {
+	if t == nil || !t.managed || t.orchestrator == nil {
+		return fmt.Errorf("managed tunnel is not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	select {
+	case <-t.orchestrator.RoutesReady():
+		return nil
+	case <-t.done:
+		return fmt.Errorf("managed tunnel stopped before receiving configuration")
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (t *Tunnel) Wait() error {
@@ -236,9 +266,11 @@ func Start(ctx context.Context, cfg Config) (*Tunnel, error) {
 
 	connectedSignal := signal.New(make(chan struct{}))
 	t := &Tunnel{
-		ready:    connectedSignal.Wait(),
-		done:     make(chan struct{}),
-		observer: observer,
+		ready:        connectedSignal.Wait(),
+		done:         make(chan struct{}),
+		observer:     observer,
+		orchestrator: orchestrator,
+		managed:      managed != nil,
 	}
 	if provisioned != nil {
 		t.URL = provisioned.url

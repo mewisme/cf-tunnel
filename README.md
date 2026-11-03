@@ -91,6 +91,7 @@ Use the same `CF_TUNNEL_TOKEN` environment variable with the token commands:
 ```bash
 cf-tunnel token inspect
 cf-tunnel token verify --timeout 30s
+cf-tunnel routes --timeout 30s
 ```
 
 `token inspect` is **offline**: it validates the connector token format and
@@ -114,6 +115,20 @@ timeout **does not establish that a token is revoked**; it means verification
 could not be completed. Successful verification does not prove Dashboard routes
 or local origin services are reachable. These commands use no Cloudflare
 management API token and do not expose the connector secret.
+
+`cf-tunnel routes` also connects temporarily using `CF_TUNNEL_TOKEN`, waits
+for the first successfully applied Dashboard configuration, prints its version
+and hostname/path-to-local-service mapping as JSON, then disconnects:
+
+```json
+{"tunnel_id":"2bfc84a2-8393-46b7-b3f5-56f7c778a311","version":3,"routes":[{"hostname":"http.example.com","service":"http://localhost:5555"},{"service":"http_status:404"}]}
+```
+
+This reports what the connector **received and applied**, not an independent
+Dashboard or DNS query. It includes catch-all rules; local origin availability
+is not checked. Service URL credentials, paths, queries, and fragments are not
+included in the returned JSON; Unix socket paths are redacted. A missing, rejected, or delayed remote config
+returns `configuration_unavailable` without exposing raw Edge errors.
 
 Configure public hostnames and their local service URLs (for example,
 `http://127.0.0.1:8080`) on the Cloudflare Dashboard. The connector
@@ -209,14 +224,23 @@ if err := tunnel.WaitUntilReady(ctx); err != nil {
 	return err
 }
 log.Printf("connected managed tunnel %s", tunnel.TunnelID())
+if err := tunnel.WaitUntilConfigured(ctx); err != nil {
+    return err
+}
+routes, ok := tunnel.Routes()
+if ok {
+    log.Printf("Dashboard routes at version %d: %+v", routes.Version, routes.Routes)
+}
 return tunnel.Wait()
 ```
 
 Import `os` for the environment variable. The caller owns the context and
 shutdown. The registered hostname(s), local origin URLs, and their updates are
-managed by Cloudflare. `PublicURL()` is empty in managed mode; retrieve
-the URL(s) from your Dashboard. Do not combine `Token` with `OriginURL`
-or `QuickService`; optionally combine `Token` with `Handler` as below.
+managed by Cloudflare. `PublicURL()` is empty in managed mode; inspect the
+current mapped hostnames with `Routes()` after `WaitUntilConfigured()`. Future
+Dashboard updates are reflected by subsequent `Routes()` calls. These methods
+do not require a Cloudflare management API token. Do not combine `Token` with
+`OriginURL` or `QuickService`; optionally combine `Token` with `Handler` as below.
 
 You can inspect a token without connecting or verify it with a short-lived
 Cloudflare Edge registration:
